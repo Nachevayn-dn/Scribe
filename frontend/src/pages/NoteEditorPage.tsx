@@ -3,6 +3,7 @@ import * as notesApi from "../api/notes";
 import type { ClinicalNote } from "../types";
 import { EntityLegend } from "../components/notes/EntityLegend";
 import { NoteLineEditor } from "../components/notes/NoteLineEditor";
+import { TemplateSelectorPanel } from "../components/notes/TemplateSelectorPanel";
 import { ApiError } from "../api/client";
 
 interface Props {
@@ -16,9 +17,24 @@ interface Props {
 export function NoteEditorPage({ encounterId, note, canEdit, canSign, onNoteChange }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [signing, setSigning] = useState(false);
+  const [switchingTemplate, setSwitchingTemplate] = useState(false);
 
   const lines = note.rendered_content.split("\n");
   const readOnly = !canEdit || note.status === "SIGNED";
+
+  async function handleTemplateChange(templateId: string) {
+    if (templateId === note.template_id) return;
+    setSwitchingTemplate(true);
+    setError(null);
+    try {
+      const updated = await notesApi.renderNote(encounterId, templateId);
+      onNoteChange(updated);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to switch template");
+    } finally {
+      setSwitchingTemplate(false);
+    }
+  }
 
   async function handleLineSave(lineIndex: number, newText: string) {
     try {
@@ -52,6 +68,14 @@ export function NoteEditorPage({ encounterId, note, canEdit, canSign, onNoteChan
       </div>
 
       <EntityLegend />
+
+      {canEdit && note.status !== "SIGNED" && (
+        <TemplateSelectorPanel
+          value={note.template_id}
+          onChange={handleTemplateChange}
+          disabled={switchingTemplate}
+        />
+      )}
 
       <div className="stack" style={{ gap: 2 }}>
         {lines.map((lineText, idx) => (

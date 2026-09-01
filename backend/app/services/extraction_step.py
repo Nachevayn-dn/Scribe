@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.clinical_note import ClinicalNote, NoteEntity
 from app.models.encounter import Encounter, EncounterStatus
-from app.models.template import NoteTemplate
+from app.models.template import NoteTemplate, TemplateType
 from app.models.transcript import Transcript
 from app.services.audit_service import log_action
 from app.services.extraction.anthropic_provider import AnthropicExtractionProvider
@@ -19,11 +19,20 @@ from app.services.preference_engine import get_active_preferences
 
 
 async def _get_template(db: AsyncSession, template_id: uuid.UUID | None) -> NoteTemplate | None:
-    if template_id is None:
-        return None
+    if template_id is not None:
+        return (
+            await db.execute(select(NoteTemplate).where(NoteTemplate.id == template_id))
+        ).scalar_one_or_none()
+    # No template requested: default to the global Clinical Summary template
+    # so notes are organized into sections out of the box.
     return (
-        await db.execute(select(NoteTemplate).where(NoteTemplate.id == template_id))
-    ).scalar_one_or_none()
+        await db.execute(
+            select(NoteTemplate).where(
+                NoteTemplate.clinic_id.is_(None),
+                NoteTemplate.template_type == TemplateType.CLINICAL_SUMMARY,
+            )
+        )
+    ).scalars().first()
 
 
 async def run_extraction(

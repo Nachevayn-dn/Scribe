@@ -13,6 +13,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.main import app
 from app.models.base import Base
+from app.models.template import NoteTemplate, TemplateType
 
 settings = get_settings()
 
@@ -29,6 +30,29 @@ async def _prepare_database():
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
+
+    # Mirrors alembic/versions/..._seed_global_templates.py — create_all()
+    # builds schema only, not migration data, so tests that rely on the
+    # default (no template_id) extraction path need these too.
+    async with TestSessionLocal() as session:
+        session.add_all(
+            [
+                NoteTemplate(
+                    clinic_id=None,
+                    name="Clinical Summary",
+                    template_type=TemplateType.CLINICAL_SUMMARY,
+                    structure=["Intake", "Diagnostics", "Next Steps", "Close"],
+                ),
+                NoteTemplate(
+                    clinic_id=None,
+                    name="Referral Letter",
+                    template_type=TemplateType.REFERRAL_LETTER,
+                    structure=["Reason for Referral", "Clinical History", "Findings", "Recommendation"],
+                ),
+            ]
+        )
+        await session.commit()
+
     yield
     await test_engine.dispose()
 

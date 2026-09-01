@@ -139,7 +139,7 @@ export function PatientListPage() {
           <div className="row" style={{ flexWrap: "wrap" }}>
             {providers.map((prov) => (
               <button key={prov.id} className="btn btn-primary" onClick={() => handleStartEncounter(prov.id)}>
-                Dr. {prov.full_name}
+                {prov.full_name}
               </button>
             ))}
           </div>

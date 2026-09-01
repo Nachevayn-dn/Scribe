@@ -103,6 +103,56 @@ async def test_audio_upload_runs_pipeline_to_note_ready(client: AsyncClient):
     assert entity_types == {"SYMPTOM", "DIAGNOSTIC"}
 
 
+async def test_active_doctor_preferences_reach_the_extraction_call(client: AsyncClient):
+    admin = await signup_clinic(client)
+    provider = await create_user(client, admin["headers"], role="PROVIDER")
+
+    pref_resp = await client.post(
+        "/api/v1/preferences",
+        headers=provider["headers"],
+        json={"trigger_phrase": "tooth pain", "instruction": "always suggest a CBCT scan"},
+    )
+    assert pref_resp.status_code == 201
+
+    encounter_id = await _start_encounter(
+        client, admin["headers"], provider["headers"], provider["id"]
+    )
+    fake_transcript = TranscriptionResult(
+        text="Patient reports tooth pain.", language="en", provider_name="openai-whisper-1"
+    )
+
+    with (
+        patch("app.services.pipeline.OpenAIWhisperProvider") as mock_whisper_cls,
+        patch("app.services.extraction_step.AnthropicExtractionProvider") as mock_claude_cls,
+    ):
+        mock_whisper_cls.return_value.transcribe = AsyncMock(return_value=fake_transcript)
+        extract_mock = AsyncMock(return_value=FAKE_EXTRACTION)
+        mock_claude_cls.return_value.extract = extract_mock
+
+        await client.post(
+            f"/api/v1/encounters/{encounter_id}/audio",
+            headers=provider["headers"],
+            files={"file": ("recording.webm", b"fake-audio-bytes", "audio/webm")},
+        )
+        for _ in range(20):
+            status_resp = await client.get(
+                f"/api/v1/encounters/{encounter_id}", headers=provider["headers"]
+            )
+            if status_resp.json()["status"] in ("NOTE_READY", "FAILED"):
+                break
+            await asyncio.sleep(0.05)
+
+    assert status_resp.json()["status"] == "NOTE_READY", status_resp.json()
+    extract_mock.assert_awaited_once()
+    _, call_preferences, call_template = extract_mock.await_args.args
+    assert len(call_preferences) == 1
+    assert call_preferences[0].instruction == "always suggest a CBCT scan"
+    # No template_id was specified on upload, so the default global
+    # Clinical Summary template should have been selected.
+    assert call_template is not None
+    assert call_template.name == "Clinical Summary"
+
+
 async def test_audio_upload_marks_failed_on_transcription_error(client: AsyncClient):
     admin = await signup_clinic(client)
     provider = await create_user(client, admin["headers"], role="PROVIDER")

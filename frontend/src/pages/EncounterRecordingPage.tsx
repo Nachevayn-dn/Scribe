@@ -5,6 +5,7 @@ import * as notesApi from "../api/notes";
 import { useAuth } from "../auth/AuthContext";
 import { AudioRecorder } from "../components/audio/AudioRecorder";
 import { AudioUploadStatus } from "../components/audio/AudioUploadStatus";
+import { TemplateSelectorPanel } from "../components/notes/TemplateSelectorPanel";
 import { ApiError } from "../api/client";
 import type { ClinicalNote, Encounter } from "../types";
 import { NoteEditorPage } from "./NoteEditorPage";
@@ -19,6 +20,7 @@ export function EncounterRecordingPage() {
   const [note, setNote] = useState<ClinicalNote | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [templateId, setTemplateId] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
 
   const loadEncounter = useCallback(async () => {
@@ -60,7 +62,7 @@ export function EncounterRecordingPage() {
     setUploading(true);
     setError(null);
     try {
-      const updated = await encountersApi.uploadAudio(encounterId, blob, filename);
+      const updated = await encountersApi.uploadAudio(encounterId, blob, filename, templateId ?? undefined);
       setEncounter(updated);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to upload audio");
@@ -86,7 +88,15 @@ export function EncounterRecordingPage() {
         <AudioUploadStatus status={encounter.status} failureReason={encounter.failure_reason} />
         {error && <div className="error-text">{error}</div>}
         {encounter.status === "IN_PROGRESS" && (
-          <AudioRecorder disabled={uploading} onRecordingReady={handleRecordingReady} />
+          <>
+            <TemplateSelectorPanel
+              value={templateId}
+              onChange={setTemplateId}
+              disabled={uploading}
+              label="Note template"
+            />
+            <AudioRecorder disabled={uploading} onRecordingReady={handleRecordingReady} />
+          </>
         )}
       </div>
 

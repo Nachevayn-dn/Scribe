@@ -135,7 +135,7 @@ export function ClinicAdminDashboard() {
             <option value="">Select provider…</option>
             {providers.map((p) => (
               <option key={p.id} value={p.id}>
-                Dr. {p.full_name}
+                {p.full_name}
               </option>
             ))}
           </select>
