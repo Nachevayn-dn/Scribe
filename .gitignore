@@ -20,8 +20,8 @@ frontend/.vite/
 !frontend/.env.example
 
 ## Data
-data/audio/*
-!data/audio/.gitkeep
+**/data/audio/*
+!/data/audio/.gitkeep
 
 ## OS / editor
 .DS_Store
