@@ -1,0 +1,66 @@
+# Local development stack: Postgres + backend (hot-reload) + frontend (Vite dev server).
+# Run from the repo root: docker compose -f deploy/docker-compose.yml up
+#
+# For a production-like deploy (built frontend behind nginx, Caddy TLS
+# termination, no bind mounts), layer docker-compose.prod.yml on top:
+#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml up -d
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: scribe
+      POSTGRES_PASSWORD: scribe
+      POSTGRES_DB: scribe
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scribe -d scribe"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ../backend
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://scribe:scribe@postgres:5432/scribe
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRE_MINUTES: "720"
+      CORS_ORIGINS: '["http://localhost:5173"]'
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      WHISPER_MODEL: ${WHISPER_MODEL:-whisper-1}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5}
+      AUDIO_STORAGE_DIR: /app/data/audio
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../backend:/app
+      - audio_data:/app/data/audio
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    environment:
+      VITE_API_PROXY_TARGET: http://backend:8000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ../frontend:/app
+      - frontend_node_modules:/app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  audio_data:
+  frontend_node_modules:

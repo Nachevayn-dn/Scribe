@@ -1,0 +1,51 @@
+# Production-style overrides: built images (no bind mounts/hot-reload),
+# restart policies, and a Caddy reverse proxy in front for automatic TLS.
+#
+# Usage (from repo root):
+#   cp deploy/.env.prod.example deploy/.env.prod   # fill in real secrets + your domain
+#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml \
+#     --env-file deploy/.env.prod up -d --build
+
+services:
+  postgres:
+    ports: !reset []
+    restart: unless-stopped
+
+  backend:
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    environment:
+      CORS_ORIGINS: '["https://${DOMAIN}"]'
+    volumes: !override
+      - audio_data:/app/data/audio
+    ports: !reset []
+    restart: unless-stopped
+
+  frontend:
+    image: !reset null
+    build:
+      context: ../frontend
+    command: !reset null
+    environment: !reset {}
+    volumes: !reset []
+    ports: !reset []
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  caddy_data:
+  caddy_config:

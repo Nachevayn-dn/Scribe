@@ -1,0 +1,14 @@
+{$DOMAIN} {
+	# Caddy automatically provisions and renews a Let's Encrypt TLS
+	# certificate for $DOMAIN — no manual cert management needed.
+
+	# Backend API.
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+
+	# Everything else: the built frontend (nginx serving the SPA).
+	handle {
+		reverse_proxy frontend:80
+	}
+}

@@ -18,6 +18,7 @@ frontend/.vite/
 .env.*
 !.env.example
 !frontend/.env.example
+!deploy/.env.prod.example
 
 ## Data
 **/data/audio/*
