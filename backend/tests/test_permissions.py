@@ -93,6 +93,29 @@ async def test_cross_clinic_isolation(client: AsyncClient):
     assert all(p["id"] != patient_id for p in resp.json())
 
 
+async def test_my_assigned_providers(client: AsyncClient):
+    admin = await signup_clinic(client)
+    provider = await create_user(client, admin["headers"], role="PROVIDER")
+    other_provider = await create_user(client, admin["headers"], role="PROVIDER")
+    assistant = await create_user(client, admin["headers"], role="ASSISTANT")
+    await client.post(
+        f"/api/v1/users/{provider['id']}/assistants/{assistant['id']}", headers=admin["headers"]
+    )
+
+    resp = await client.get("/api/v1/users/me/assigned-providers", headers=assistant["headers"])
+    assert resp.status_code == 200
+    ids = {u["id"] for u in resp.json()}
+    assert ids == {provider["id"]}
+
+    resp = await client.get("/api/v1/users/me/assigned-providers", headers=provider["headers"])
+    assert resp.status_code == 200
+    assert {u["id"] for u in resp.json()} == {provider["id"]}
+
+    resp = await client.get("/api/v1/users/me/assigned-providers", headers=admin["headers"])
+    assert resp.status_code == 200
+    assert {u["id"] for u in resp.json()} == {provider["id"], other_provider["id"]}
+
+
 async def test_all_roles_can_manage_patients(client: AsyncClient):
     admin = await signup_clinic(client)
     provider = await create_user(client, admin["headers"], role="PROVIDER")

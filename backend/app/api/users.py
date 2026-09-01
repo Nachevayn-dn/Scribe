@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import ConflictError, NotFoundError
 from app.core.security import hash_password
 from app.database import get_db
-from app.deps import client_ip, require_role
+from app.deps import client_ip, get_current_user, require_role
 from app.models.user import ProviderAssistant, User, UserRole
 from app.schemas.user import UserCreateRequest, UserResponse, UserUpdateRequest
 from app.services.audit_service import log_action
@@ -22,6 +22,39 @@ async def list_users(
 ) -> list[User]:
     result = await db.execute(
         select(User).where(User.clinic_id == current_user.clinic_id, User.deleted_at.is_(None))
+    )
+    return list(result.scalars().all())
+
+
+@router.get("/me/assigned-providers", response_model=list[UserResponse])
+async def my_assigned_providers(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[User]:
+    """Providers the current user may start an encounter for: themselves if
+    they're a PROVIDER, every provider in the clinic if SUPER_ADMIN, or the
+    providers they're assigned to if ASSISTANT."""
+    if current_user.role == UserRole.PROVIDER:
+        return [current_user]
+
+    if current_user.role == UserRole.SUPER_ADMIN:
+        result = await db.execute(
+            select(User).where(
+                User.clinic_id == current_user.clinic_id,
+                User.role == UserRole.PROVIDER,
+                User.deleted_at.is_(None),
+            )
+        )
+        return list(result.scalars().all())
+
+    # ASSISTANT
+    result = await db.execute(
+        select(User)
+        .join(ProviderAssistant, ProviderAssistant.provider_id == User.id)
+        .where(
+            ProviderAssistant.assistant_id == current_user.id,
+            User.deleted_at.is_(None),
+        )
     )
     return list(result.scalars().all())
 
