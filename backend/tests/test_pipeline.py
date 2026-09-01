@@ -1,12 +1,34 @@
-"""Audio upload -> transcription pipeline, with the OpenAI Whisper call
-mocked out so tests never hit the network / need a real API key."""
+"""Audio upload -> transcription -> extraction pipeline, with the OpenAI
+Whisper and Anthropic Claude calls mocked out so tests never hit the
+network / need real API keys."""
 import asyncio
 from unittest.mock import AsyncMock, patch
 
 from httpx import AsyncClient
 
+from app.services.extraction.base import ExtractedEntity, ExtractedLine, ExtractionResult
 from app.services.transcription.base import TranscriptionResult
 from tests.conftest import create_user, signup_clinic
+
+FAKE_EXTRACTION = ExtractionResult(
+    lines=[
+        ExtractedLine(text="Chief Complaint"),
+        ExtractedLine(
+            text="Patient reports tooth pain on the lower left molar.",
+            entities=[
+                ExtractedEntity(entity_type="SYMPTOM", text="tooth pain", start_offset=15, end_offset=25)
+            ],
+        ),
+        ExtractedLine(
+            text="Recommend a CBCT scan.",
+            entities=[
+                ExtractedEntity(entity_type="DIAGNOSTIC", text="CBCT scan", start_offset=12, end_offset=21)
+            ],
+        ),
+    ]
+)
+
+
 
 
 async def _start_encounter(client: AsyncClient, admin_headers: dict, provider_headers: dict, provider_id: str) -> str:
@@ -38,10 +60,12 @@ async def test_audio_upload_runs_pipeline_to_note_ready(client: AsyncClient):
         provider_name="openai-whisper-1",
     )
 
-    with patch(
-        "app.services.pipeline.OpenAIWhisperProvider"
-    ) as mock_provider_cls:
-        mock_provider_cls.return_value.transcribe = AsyncMock(return_value=fake_result)
+    with (
+        patch("app.services.pipeline.OpenAIWhisperProvider") as mock_whisper_cls,
+        patch("app.services.extraction_step.AnthropicExtractionProvider") as mock_claude_cls,
+    ):
+        mock_whisper_cls.return_value.transcribe = AsyncMock(return_value=fake_result)
+        mock_claude_cls.return_value.extract = AsyncMock(return_value=FAKE_EXTRACTION)
 
         upload_resp = await client.post(
             f"/api/v1/encounters/{encounter_id}/audio",
@@ -68,6 +92,15 @@ async def test_audio_upload_runs_pipeline_to_note_ready(client: AsyncClient):
     )
     assert transcript_resp.status_code == 200
     assert "tooth pain" in transcript_resp.json()["raw_text"]
+
+    note_resp = await client.get(
+        f"/api/v1/encounters/{encounter_id}/note", headers=provider["headers"]
+    )
+    assert note_resp.status_code == 200
+    note = note_resp.json()
+    assert "Recommend a CBCT scan." in note["rendered_content"]
+    entity_types = {e["entity_type"] for e in note["entities"]}
+    assert entity_types == {"SYMPTOM", "DIAGNOSTIC"}
 
 
 async def test_audio_upload_marks_failed_on_transcription_error(client: AsyncClient):

@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, Request, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,6 +40,7 @@ async def upload_audio(
     request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
+    template_id: uuid.UUID | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Encounter:
@@ -69,7 +70,7 @@ async def upload_audio(
     await db.commit()
     await db.refresh(encounter)
 
-    background_tasks.add_task(run_pipeline_task, encounter_id)
+    background_tasks.add_task(run_pipeline_task, encounter_id, template_id)
     return encounter
 
 

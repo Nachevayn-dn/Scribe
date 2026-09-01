@@ -19,6 +19,7 @@ from app.models.encounter import AudioFile, Encounter, EncounterStatus
 from app.models.transcript import Transcript
 from app.services import storage
 from app.services.audit_service import log_action
+from app.services.extraction_step import run_extraction
 from app.services.transcription.whisper_provider import OpenAIWhisperProvider
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ async def _fail(db, encounter: Encounter, reason: str) -> None:
     logger.error("Encounter %s pipeline failed: %s", encounter.id, reason)
 
 
-async def run_pipeline(encounter_id: uuid.UUID) -> None:
+async def run_pipeline(encounter_id: uuid.UUID, template_id: uuid.UUID | None = None) -> None:
     async with AsyncSessionLocal() as db:
         encounter = (
             await db.execute(select(Encounter).where(Encounter.id == encounter_id))
@@ -81,12 +82,7 @@ async def run_pipeline(encounter_id: uuid.UUID) -> None:
             encounter.status = EncounterStatus.EXTRACTING
             await db.commit()
 
-            # Clinical extraction (transcript -> structured, entity-tagged
-            # note) is wired up in app.services.extraction — see pipeline
-            # milestone 4. Nothing further happens here yet in milestone 3.
-            from app.services.extraction_step import run_extraction
-
-            await run_extraction(db, encounter, transcript)
+            await run_extraction(db, encounter, transcript, template_id=template_id)
 
         except Exception as exc:  # noqa: BLE001 — pipeline must never crash silently
             await db.rollback()
