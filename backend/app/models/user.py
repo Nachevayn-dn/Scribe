@@ -28,7 +28,7 @@ class User(UUIDPkMixin, TimestampMixin, SoftDeleteMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     license_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
-    clinic: Mapped["Clinic"] = relationship(back_populates="users")  # noqa: F821
+    clinic: Mapped["Clinic"] = relationship(back_populates="users", lazy="selectin")  # noqa: F821
 
 
 class ProviderAssistant(UUIDPkMixin, TimestampMixin, Base):

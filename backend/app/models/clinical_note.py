@@ -43,7 +43,10 @@ class ClinicalNote(UUIDPkMixin, TimestampMixin, Base):
     raw_structured: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
     entities: Mapped[list["NoteEntity"]] = relationship(
-        back_populates="clinical_note", cascade="all, delete-orphan", order_by="NoteEntity.line_index"
+        back_populates="clinical_note",
+        cascade="all, delete-orphan",
+        order_by="NoteEntity.line_index",
+        lazy="selectin",
     )
 
 

@@ -45,8 +45,8 @@ class Encounter(UUIDPkMixin, TimestampMixin, Base):
     )
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    patient: Mapped["Patient"] = relationship()  # noqa: F821
-    provider: Mapped["User"] = relationship(foreign_keys=[provider_id])  # noqa: F821
+    patient: Mapped["Patient"] = relationship(lazy="selectin")  # noqa: F821
+    provider: Mapped["User"] = relationship(foreign_keys=[provider_id], lazy="selectin")  # noqa: F821
 
 
 class AudioFile(UUIDPkMixin, TimestampMixin, Base):
