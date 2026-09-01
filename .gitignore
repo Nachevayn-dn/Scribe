@@ -31,3 +31,4 @@ frontend/.vite/
 
 ## Docker
 *.log
+*.tsbuildinfo
