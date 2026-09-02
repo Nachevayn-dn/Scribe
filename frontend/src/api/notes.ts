@@ -5,6 +5,13 @@ export function getTranscript(encounterId: string) {
   return api.get<Transcript>(`/encounters/${encounterId}/transcript`);
 }
 
+export function editTranscriptLine(encounterId: string, lineIndex: number, newText: string) {
+  return api.patch<Transcript>(`/encounters/${encounterId}/transcript`, {
+    line_index: lineIndex,
+    new_text: newText,
+  });
+}
+
 export function getNote(encounterId: string) {
   return api.get<ClinicalNote>(`/encounters/${encounterId}/note`);
 }

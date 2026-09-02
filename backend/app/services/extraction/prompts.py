@@ -49,6 +49,75 @@ def build_user_prompt(
     return "\n\n".join(parts)
 
 
+TAGGING_SYSTEM_PROMPT = """You are a clinical scribe assistant. You are given a transcript of a \
+patient-provider conversation, already split into numbered lines. Tag clinically relevant spans \
+in each line — do not rewrite, summarize, or reorder anything, just identify spans.
+
+Rules:
+- For each line that contains one, tag every clinically relevant span with exactly one entity \
+type: MEDICATION, PROCEDURE, DIAGNOSTIC, SYMPTOM, or ALLERGY. Most lines have zero or a few \
+tagged spans — don't force it.
+- start_offset/end_offset are character offsets of the tagged span within that line's text \
+(0-indexed, end exclusive), measured against the exact line text given below. Get these exactly \
+right so highlighting lines up with the text.
+- Only include lines that have at least one tagged entity in your response — omit lines with none.
+- Never alter, translate, or paraphrase the wording; you are only pointing at spans within the \
+text you were given.
+"""
+
+
+def build_tagging_user_prompt(lines: list[str]) -> str:
+    numbered = "\n".join(f"{idx}: {line}" for idx, line in enumerate(lines))
+    return (
+        f"Transcript lines (format is \"<line_index>: <text>\"):\n{numbered}\n\n"
+        "Call the tag_transcript_entities tool exactly once with the tagged entities."
+    )
+
+
+TAGGING_TOOL = {
+    "name": "tag_transcript_entities",
+    "description": "Tags clinically relevant entity spans within the given transcript lines, referenced by line_index.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "lines": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "line_index": {"type": "integer"},
+                        "entities": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "entity_type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "MEDICATION",
+                                            "PROCEDURE",
+                                            "DIAGNOSTIC",
+                                            "SYMPTOM",
+                                            "ALLERGY",
+                                        ],
+                                    },
+                                    "text": {"type": "string"},
+                                    "start_offset": {"type": "integer"},
+                                    "end_offset": {"type": "integer"},
+                                },
+                                "required": ["entity_type", "text", "start_offset", "end_offset"],
+                            },
+                        },
+                    },
+                    "required": ["line_index", "entities"],
+                },
+            }
+        },
+        "required": ["lines"],
+    },
+}
+
+
 EXTRACTION_TOOL = {
     "name": "record_clinical_note",
     "description": "Records the structured, entity-tagged clinical note extracted from the transcript.",

@@ -6,17 +6,6 @@ from pydantic import BaseModel
 from app.models.clinical_note import EntityType, NoteStatus
 
 
-class TranscriptResponse(BaseModel):
-    id: uuid.UUID
-    encounter_id: uuid.UUID
-    raw_text: str
-    provider: str
-    language: str | None
-    created_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
 class NoteEntityResponse(BaseModel):
     id: uuid.UUID
     entity_type: EntityType
@@ -26,6 +15,20 @@ class NoteEntityResponse(BaseModel):
     end_offset: int | None
     confidence: float | None
     is_edited: bool
+
+    model_config = {"from_attributes": True}
+
+
+class TranscriptResponse(BaseModel):
+    id: uuid.UUID
+    encounter_id: uuid.UUID
+    raw_text: str
+    provider: str
+    language: str | None
+    created_at: datetime
+    # Same shape as NoteEntity, reused here — tagged lazily on first view,
+    # see services/transcript_tagging.py.
+    entities: list[NoteEntityResponse]
 
     model_config = {"from_attributes": True}
 
@@ -50,3 +53,8 @@ class NoteLineEditRequest(BaseModel):
     line_index: int | None = None
     new_text: str | None = None
     rendered_content: str | None = None
+
+
+# Same shape, reused for editing a transcript line instead of a note line
+# (see PATCH /encounters/{id}/transcript).
+TranscriptLineEditRequest = NoteLineEditRequest

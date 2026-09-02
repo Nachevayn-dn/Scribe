@@ -6,6 +6,7 @@ import * as templatesApi from "../api/templates";
 import { useAuth } from "../auth/AuthContext";
 import { AudioRecorder } from "../components/audio/AudioRecorder";
 import { AudioUploadStatus } from "../components/audio/AudioUploadStatus";
+import { EntityLegend } from "../components/notes/EntityLegend";
 import { TranscriptViewer } from "../components/notes/TranscriptViewer";
 import { ApiError } from "../api/client";
 import type { ClinicalNote, Encounter, NoteTemplate, Transcript } from "../types";
@@ -83,6 +84,12 @@ export function EncounterRecordingPage() {
     }
   }
 
+  async function handleTranscriptLineSave(lineIndex: number, newText: string) {
+    if (!encounterId) return;
+    const updated = await notesApi.editTranscriptLine(encounterId, lineIndex, newText);
+    setTranscript(updated);
+  }
+
   async function handleGenerate(templateId: string) {
     if (!encounterId) return;
     setGenerating(templateId);
@@ -126,8 +133,14 @@ export function EncounterRecordingPage() {
       {transcript && (
         <div className="card stack">
           <strong>Transcript</strong>
+          <EntityLegend />
           <div style={{ maxHeight: 320, overflowY: "auto" }}>
-            <TranscriptViewer text={transcript.raw_text} />
+            <TranscriptViewer
+              text={transcript.raw_text}
+              entities={transcript.entities}
+              readOnly={!canEdit}
+              onLineSave={handleTranscriptLineSave}
+            />
           </div>
 
           {encounter.status === "TRANSCRIPT_READY" && canGenerate && (

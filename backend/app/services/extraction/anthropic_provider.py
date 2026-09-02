@@ -7,8 +7,15 @@ from pydantic import ValidationError
 from app.config import get_settings
 from app.models.preference import DoctorPreference
 from app.models.template import NoteTemplate
-from app.services.extraction.base import ClinicalExtractionProvider, ExtractionResult
-from app.services.extraction.prompts import EXTRACTION_TOOL, SYSTEM_PROMPT, build_user_prompt
+from app.services.extraction.base import ClinicalExtractionProvider, ExtractionResult, TaggingResult
+from app.services.extraction.prompts import (
+    EXTRACTION_TOOL,
+    SYSTEM_PROMPT,
+    TAGGING_SYSTEM_PROMPT,
+    TAGGING_TOOL,
+    build_tagging_user_prompt,
+    build_user_prompt,
+)
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -64,3 +71,33 @@ class AnthropicExtractionProvider(ClinicalExtractionProvider):
                 continue
 
         raise RuntimeError(f"Clinical extraction failed after retries: {last_error}")
+
+    async def tag_lines(self, lines: list[str]) -> TaggingResult:
+        if not lines:
+            return TaggingResult(lines=[])
+
+        user_prompt = build_tagging_user_prompt(lines)
+        last_error: Exception | None = None
+        for attempt in range(2):  # one retry on a parse/validation failure
+            message = await self._client.messages.create(
+                model=settings.anthropic_model,
+                max_tokens=4096,
+                system=TAGGING_SYSTEM_PROMPT,
+                tools=[TAGGING_TOOL],
+                tool_choice={"type": "tool", "name": "tag_transcript_entities"},
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+            tool_use = next(
+                (block for block in message.content if block.type == "tool_use"), None
+            )
+            if tool_use is None:
+                last_error = RuntimeError("Model did not call tag_transcript_entities")
+                continue
+            try:
+                return TaggingResult.model_validate(tool_use.input)
+            except ValidationError as exc:
+                last_error = exc
+                logger.warning("Tagging validation failed on attempt %s: %s", attempt, exc)
+                continue
+
+        raise RuntimeError(f"Transcript entity tagging failed after retries: {last_error}")

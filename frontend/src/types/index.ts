@@ -92,6 +92,9 @@ export interface Transcript {
   provider: string;
   language: string | null;
   created_at: string;
+  // Same shape as ClinicalNote's, tagged lazily on first view of the
+  // transcript (see backend/app/services/transcript_tagging.py).
+  entities: NoteEntity[];
 }
 
 export type TemplateType = "CLINICAL_SUMMARY" | "REFERRAL_LETTER" | "CUSTOM";

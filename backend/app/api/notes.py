@@ -15,9 +15,15 @@ from app.models.clinical_note import ClinicalNote, NoteStatus
 from app.models.encounter import Encounter, EncounterStatus
 from app.models.transcript import Transcript
 from app.models.user import User
-from app.schemas.note import ClinicalNoteResponse, NoteLineEditRequest, TranscriptResponse
+from app.schemas.note import (
+    ClinicalNoteResponse,
+    NoteLineEditRequest,
+    TranscriptLineEditRequest,
+    TranscriptResponse,
+)
 from app.services.audit_service import log_action
 from app.services.extraction_step import run_extraction
+from app.services.transcript_tagging import ensure_transcript_tagged
 
 router = APIRouter(prefix="/encounters", tags=["notes"])
 
@@ -71,7 +77,50 @@ async def get_transcript(
     db: AsyncSession = Depends(get_db),
 ) -> Transcript:
     await _get_accessible_encounter(db, current_user, encounter_id)
-    return await _get_latest_transcript(db, encounter_id)
+    transcript = await _get_latest_transcript(db, encounter_id)
+    await ensure_transcript_tagged(db, transcript)
+    await db.commit()
+    return transcript
+
+
+@router.patch("/{encounter_id}/transcript", response_model=TranscriptResponse)
+async def edit_transcript(
+    encounter_id: uuid.UUID,
+    payload: TranscriptLineEditRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Transcript:
+    await _get_accessible_encounter(db, current_user, encounter_id)
+    transcript = await _get_latest_transcript(db, encounter_id)
+
+    if payload.rendered_content is not None:
+        transcript.raw_text = payload.rendered_content
+    elif payload.line_index is not None and payload.new_text is not None:
+        lines = transcript.raw_text.split("\n")
+        if not 0 <= payload.line_index < len(lines):
+            raise NotFoundError("line_index out of range")
+        lines[payload.line_index] = payload.new_text
+        transcript.raw_text = "\n".join(lines)
+        for entity in transcript.entities:
+            if entity.line_index == payload.line_index:
+                entity.is_edited = True
+    else:
+        raise ConflictError("Provide either rendered_content or (line_index and new_text)")
+
+    await log_action(
+        db,
+        clinic_id=current_user.clinic_id,
+        actor_user_id=current_user.id,
+        action="TRANSCRIPT_EDITED",
+        resource_type="Transcript",
+        resource_id=str(transcript.id),
+        metadata={"line_index": payload.line_index} if payload.line_index is not None else {},
+        ip_address=client_ip(request),
+    )
+    await db.commit()
+    await db.refresh(transcript)
+    return transcript
 
 
 @router.get("/{encounter_id}/note", response_model=ClinicalNoteResponse)

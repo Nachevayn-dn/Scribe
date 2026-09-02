@@ -8,7 +8,7 @@ from app.models.encounter import AudioFile, Encounter, EncounterStatus
 from app.models.patient import Patient
 from app.models.preference import DoctorPreference
 from app.models.template import NoteTemplate, TemplateType
-from app.models.transcript import Transcript
+from app.models.transcript import Transcript, TranscriptEntity
 from app.models.user import ProviderAssistant, User, UserRole
 
 __all__ = [
@@ -27,6 +27,7 @@ __all__ = [
     "NoteTemplate",
     "TemplateType",
     "Transcript",
+    "TranscriptEntity",
     "User",
     "UserRole",
     "ProviderAssistant",

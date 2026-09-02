@@ -34,6 +34,19 @@ class ExtractionResult(BaseModel):
         return "\n".join(line.text for line in self.lines)
 
 
+class TaggedLine(BaseModel):
+    """Entities found on one existing transcript line, referenced by
+    line_index rather than carrying the line's text — tagging never rewrites
+    the transcript, it only points at spans within it."""
+
+    line_index: int
+    entities: list[ExtractedEntity] = Field(default_factory=list)
+
+
+class TaggingResult(BaseModel):
+    lines: list[TaggedLine] = Field(default_factory=list)
+
+
 class ClinicalExtractionProvider(ABC):
     @abstractmethod
     async def extract(
@@ -42,4 +55,10 @@ class ClinicalExtractionProvider(ABC):
         preferences: list[DoctorPreference],
         template: NoteTemplate | None,
     ) -> ExtractionResult:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def tag_lines(self, lines: list[str]) -> TaggingResult:
+        """Tags clinically relevant entity spans on an already-final list of
+        transcript lines, without altering their wording."""
         raise NotImplementedError

@@ -24,6 +24,7 @@ from app.models.encounter import AudioFile, Encounter, EncounterStatus
 from app.models.transcript import Transcript
 from app.services import storage
 from app.services.audit_service import log_action
+from app.services.text_lines import split_into_lines
 from app.services.transcription.whisper_provider import OpenAIWhisperProvider
 
 logger = logging.getLogger(__name__)
@@ -66,9 +67,13 @@ async def run_pipeline(encounter_id: uuid.UUID) -> None:
                 audio_bytes, audio_file.mime_type, filename=f"audio.{audio_file.mime_type.split('/')[-1]}"
             )
 
+            # Line-split at persist time (not on every read) so line_index is
+            # stable — entity tagging and line-level edits both address lines
+            # by this same numbering, computed once, here.
+            lines = split_into_lines(result.text)
             transcript = Transcript(
                 encounter_id=encounter_id,
-                raw_text=result.text,
+                raw_text="\n".join(lines) if lines else result.text,
                 provider=result.provider_name,
                 language=result.language,
             )
