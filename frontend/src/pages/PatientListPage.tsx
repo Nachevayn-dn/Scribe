@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import * as patientsApi from "../api/patients";
 import * as usersApi from "../api/users";
 import * as encountersApi from "../api/encounters";
+import { Modal } from "../components/common/Modal";
+import { EU_LANGUAGES } from "../data/languages";
 import type { Patient, User } from "../types";
 import { ApiError } from "../api/client";
 
@@ -14,6 +16,9 @@ export function PatientListPage() {
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [startingFor, setStartingFor] = useState<Patient | null>(null);
+  const [selectedProviderId, setSelectedProviderId] = useState("");
+  const [selectedLanguage, setSelectedLanguage] = useState(EU_LANGUAGES[0].code);
+  const [starting, setStarting] = useState(false);
 
   async function refresh() {
     setLoading(true);
@@ -50,13 +55,27 @@ export function PatientListPage() {
     }
   }
 
-  async function handleStartEncounter(providerId: string) {
-    if (!startingFor) return;
+  function openStartEncounter(patient: Patient) {
+    setStartingFor(patient);
+    setSelectedProviderId(providers[0]?.id ?? "");
+    setSelectedLanguage(EU_LANGUAGES[0].code);
+  }
+
+  async function handleStartEncounter() {
+    if (!startingFor || !selectedProviderId) return;
+    setStarting(true);
+    setError(null);
     try {
-      const encounter = await encountersApi.startEncounter(startingFor.id, providerId);
+      const encounter = await encountersApi.startEncounter(
+        startingFor.id,
+        selectedProviderId,
+        selectedLanguage,
+      );
       navigate(`/encounters/${encounter.id}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to start encounter");
+    } finally {
+      setStarting(false);
     }
   }
 
@@ -107,7 +126,7 @@ export function PatientListPage() {
                   <button
                     className="btn"
                     disabled={providers.length === 0}
-                    onClick={() => setStartingFor(p)}
+                    onClick={() => openStartEncounter(p)}
                     title={providers.length === 0 ? "No provider available to record for" : undefined}
                   >
                     Start encounter
@@ -127,23 +146,55 @@ export function PatientListPage() {
       </div>
 
       {startingFor && (
-        <div className="card stack">
-          <div className="row" style={{ justifyContent: "space-between" }}>
-            <strong>
-              Start encounter for {startingFor.first_name} {startingFor.last_name}
-            </strong>
+        <Modal
+          title={`Start encounter for ${startingFor.first_name} ${startingFor.last_name}`}
+          onClose={() => setStartingFor(null)}
+        >
+          <label className="stack" style={{ gap: 4 }}>
+            <span style={{ fontSize: 13, color: "var(--color-text-muted)" }}>Provider</span>
+            <select
+              className="input"
+              value={selectedProviderId}
+              onChange={(e) => setSelectedProviderId(e.target.value)}
+            >
+              {providers.map((prov) => (
+                <option key={prov.id} value={prov.id}>
+                  {prov.full_name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="stack" style={{ gap: 4 }}>
+            <span style={{ fontSize: 13, color: "var(--color-text-muted)" }}>
+              Language for this visit
+            </span>
+            <select
+              className="input"
+              value={selectedLanguage}
+              onChange={(e) => setSelectedLanguage(e.target.value)}
+            >
+              {EU_LANGUAGES.map((lang) => (
+                <option key={lang.code} value={lang.code}>
+                  {lang.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="row" style={{ justifyContent: "flex-end" }}>
             <button className="btn" onClick={() => setStartingFor(null)}>
               Cancel
             </button>
+            <button
+              className="btn btn-primary"
+              disabled={!selectedProviderId || starting}
+              onClick={handleStartEncounter}
+            >
+              {starting ? "Starting…" : "Start Encounter"}
+            </button>
           </div>
-          <div className="row" style={{ flexWrap: "wrap" }}>
-            {providers.map((prov) => (
-              <button key={prov.id} className="btn btn-primary" onClick={() => handleStartEncounter(prov.id)}>
-                {prov.full_name}
-              </button>
-            ))}
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

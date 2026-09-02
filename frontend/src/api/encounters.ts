@@ -5,8 +5,12 @@ export function listEncounters(filters?: { patient_id?: string; provider_id?: st
   return api.get<Encounter[]>("/encounters", filters);
 }
 
-export function startEncounter(patientId: string, providerId: string) {
-  return api.post<Encounter>("/encounters", { patient_id: patientId, provider_id: providerId });
+export function startEncounter(patientId: string, providerId: string, language?: string) {
+  return api.post<Encounter>("/encounters", {
+    patient_id: patientId,
+    provider_id: providerId,
+    language: language ?? null,
+  });
 }
 
 export function getEncounter(id: string) {

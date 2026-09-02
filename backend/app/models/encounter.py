@@ -44,6 +44,11 @@ class Encounter(UUIDPkMixin, TimestampMixin, Base):
         nullable=False,
     )
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # ISO-639-1 code (e.g. "en", "bg") chosen by the provider when starting
+    # the encounter — the language the visit will be conducted in. Passed
+    # through to the transcription provider as a hint (see
+    # services/pipeline.py); null means "let Whisper auto-detect."
+    language: Mapped[str | None] = mapped_column(String(10), nullable=True)
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default="now()"
     )

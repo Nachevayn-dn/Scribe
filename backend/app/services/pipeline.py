@@ -64,7 +64,10 @@ async def run_pipeline(encounter_id: uuid.UUID) -> None:
             audio_bytes = storage.read_audio(audio_file.storage_path)
             provider = OpenAIWhisperProvider()
             result = await provider.transcribe(
-                audio_bytes, audio_file.mime_type, filename=f"audio.{audio_file.mime_type.split('/')[-1]}"
+                audio_bytes,
+                audio_file.mime_type,
+                filename=f"audio.{audio_file.mime_type.split('/')[-1]}",
+                language=encounter.language,
             )
 
             # Line-split at persist time (not on every read) so line_index is

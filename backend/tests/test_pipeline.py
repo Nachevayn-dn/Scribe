@@ -221,6 +221,47 @@ async def test_active_doctor_preferences_reach_the_extraction_call(client: Async
     assert call_template.name == "Clinical Summary"
 
 
+async def test_encounter_language_is_passed_to_the_transcription_provider(client: AsyncClient):
+    admin = await signup_clinic(client)
+    provider = await create_user(client, admin["headers"], role="PROVIDER")
+
+    patient_resp = await client.post(
+        "/api/v1/patients",
+        headers=admin["headers"],
+        json={"first_name": "Jane", "last_name": "Doe", "date_of_birth": "1990-01-01"},
+    )
+    patient_id = patient_resp.json()["id"]
+    encounter_resp = await client.post(
+        "/api/v1/encounters",
+        headers=provider["headers"],
+        json={"patient_id": patient_id, "provider_id": provider["id"], "language": "bg"},
+    )
+    encounter_id = encounter_resp.json()["id"]
+
+    fake_result = TranscriptionResult(
+        text="Пациентът съобщава за болка.", language="bg", provider_name="openai-whisper-1"
+    )
+    with patch("app.services.pipeline.OpenAIWhisperProvider") as mock_whisper_cls:
+        transcribe_mock = AsyncMock(return_value=fake_result)
+        mock_whisper_cls.return_value.transcribe = transcribe_mock
+        await client.post(
+            f"/api/v1/encounters/{encounter_id}/audio",
+            headers=provider["headers"],
+            files={"file": ("recording.webm", b"fake-audio-bytes", "audio/webm")},
+        )
+        for _ in range(20):
+            status_resp = await client.get(
+                f"/api/v1/encounters/{encounter_id}", headers=provider["headers"]
+            )
+            if status_resp.json()["status"] in ("TRANSCRIPT_READY", "FAILED"):
+                break
+            await asyncio.sleep(0.05)
+
+    assert status_resp.json()["status"] == "TRANSCRIPT_READY", status_resp.json()
+    transcribe_mock.assert_awaited_once()
+    assert transcribe_mock.await_args.kwargs["language"] == "bg"
+
+
 async def test_audio_upload_marks_failed_on_transcription_error(client: AsyncClient):
     admin = await signup_clinic(client)
     provider = await create_user(client, admin["headers"], role="PROVIDER")

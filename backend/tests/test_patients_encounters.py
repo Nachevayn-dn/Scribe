@@ -74,6 +74,26 @@ async def test_provider_can_start_encounter_for_self(client: AsyncClient):
     body = resp.json()
     assert body["status"] == "IN_PROGRESS"
     assert body["provider_id"] == provider["id"]
+    assert body["language"] is None  # omitted -> auto-detect
+
+
+async def test_start_encounter_persists_chosen_language(client: AsyncClient):
+    admin = await signup_clinic(client)
+    provider = await create_user(client, admin["headers"], role="PROVIDER")
+    patient_id = await _create_patient(client, admin["headers"])
+
+    resp = await client.post(
+        "/api/v1/encounters",
+        headers=provider["headers"],
+        json={"patient_id": patient_id, "provider_id": provider["id"], "language": "bg"},
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["language"] == "bg"
+
+    get_resp = await client.get(
+        f"/api/v1/encounters/{resp.json()['id']}", headers=provider["headers"]
+    )
+    assert get_resp.json()["language"] == "bg"
 
 
 async def test_provider_cannot_start_encounter_for_another_provider(client: AsyncClient):

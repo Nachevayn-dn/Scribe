@@ -55,6 +55,9 @@ export interface Encounter {
   created_by_id: string;
   status: EncounterStatus;
   failure_reason: string | null;
+  // ISO-639-1 code chosen by the provider when starting the encounter
+  // (see data/languages.ts) — null means auto-detect.
+  language: string | null;
   started_at: string;
   ended_at: string | null;
 }

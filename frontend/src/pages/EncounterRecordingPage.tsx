@@ -120,7 +120,7 @@ export function EncounterRecordingPage() {
       <button className="btn" onClick={() => navigate("/patients")} style={{ alignSelf: "flex-start" }}>
         ← Back to patients
       </button>
-      <h1 style={{ fontSize: 22 }}>Encounter</h1>
+      <h1 style={{ fontSize: 22 }}>Encounter Scribe session</h1>
 
       <div className="card stack">
         <AudioUploadStatus status={encounter.status} failureReason={encounter.failure_reason} />

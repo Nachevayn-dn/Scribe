@@ -66,6 +66,7 @@ async def start_encounter(
         patient_id=patient.id,
         provider_id=provider.id,
         created_by_id=current_user.id,
+        language=payload.language,
     )
     db.add(encounter)
     await db.flush()

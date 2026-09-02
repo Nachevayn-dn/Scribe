@@ -17,12 +17,20 @@ class OpenAIWhisperProvider(TranscriptionProvider):
             )
         self._client = AsyncOpenAI(api_key=settings.openai_api_key)
 
-    async def transcribe(self, audio_bytes: bytes, mime_type: str, filename: str) -> TranscriptionResult:
+    async def transcribe(
+        self,
+        audio_bytes: bytes,
+        mime_type: str,
+        filename: str,
+        language: str | None = None,
+    ) -> TranscriptionResult:
         audio_file = io.BytesIO(audio_bytes)
         audio_file.name = filename  # the SDK reads this for multipart form filename
+        kwargs = {"language": language} if language else {}
         response = await self._client.audio.transcriptions.create(
             model=settings.whisper_model,
             file=audio_file,
+            **kwargs,
         )
         return TranscriptionResult(
             text=response.text,

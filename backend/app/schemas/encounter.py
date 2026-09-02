@@ -9,6 +9,9 @@ from app.models.encounter import EncounterStatus
 class EncounterCreateRequest(BaseModel):
     patient_id: uuid.UUID
     provider_id: uuid.UUID
+    # ISO-639-1 code, e.g. "en", "bg" — the language the provider picks for
+    # this visit. Optional: omit to let the transcription provider auto-detect.
+    language: str | None = None
 
 
 class EncounterResponse(BaseModel):
@@ -19,6 +22,7 @@ class EncounterResponse(BaseModel):
     created_by_id: uuid.UUID
     status: EncounterStatus
     failure_reason: str | None
+    language: str | None
     started_at: datetime
     ended_at: datetime | None
 
