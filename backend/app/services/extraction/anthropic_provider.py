@@ -20,7 +20,17 @@ class AnthropicExtractionProvider(ClinicalExtractionProvider):
             raise RuntimeError(
                 "ANTHROPIC_API_KEY is not set — required for clinical note extraction"
             )
-        self._client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+        # A "multi-workspace" personal API key requires this header on every
+        # request (Anthropic returns a 400 otherwise). Single-workspace keys
+        # ignore it, so it's safe to always send when configured.
+        default_headers = (
+            {"anthropic-workspace-id": settings.anthropic_workspace_id}
+            if settings.anthropic_workspace_id
+            else None
+        )
+        self._client = AsyncAnthropic(
+            api_key=settings.anthropic_api_key, default_headers=default_headers
+        )
 
     async def extract(
         self,

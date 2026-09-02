@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     # External providers
     openai_api_key: str | None = None
     anthropic_api_key: str | None = None
+    # Only needed if your Anthropic API key is a "multi-workspace" personal
+    # key (Anthropic returns a 400 asking for this if so). Not a secret —
+    # find it at console.anthropic.com/settings/workspaces.
+    anthropic_workspace_id: str | None = None
     whisper_model: str = "whisper-1"
     anthropic_model: str = "claude-sonnet-5"
 
