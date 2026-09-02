@@ -63,7 +63,7 @@ export function NoteLineEditor({ lineIndex, text, entities, readOnly, onSave }: 
         minHeight: 24,
       }}
       onMouseEnter={(e) => {
-        if (!readOnly) e.currentTarget.style.background = "#f0f4ff";
+        if (!readOnly) e.currentTarget.style.background = "var(--color-surface-hover)";
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.background = "transparent";

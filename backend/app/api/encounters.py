@@ -67,6 +67,8 @@ async def start_encounter(
         provider_id=provider.id,
         created_by_id=current_user.id,
         language=payload.language,
+        is_scheduled_appointment=payload.is_scheduled_appointment,
+        appointment_time=payload.appointment_time,
     )
     db.add(encounter)
     await db.flush()

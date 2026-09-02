@@ -5,6 +5,7 @@ from app.api import (
     audit,
     auth,
     clinics,
+    dashboard,
     encounters,
     notes,
     patients,
@@ -24,3 +25,4 @@ api_router.include_router(notes.router)
 api_router.include_router(templates.router)
 api_router.include_router(preferences.router)
 api_router.include_router(audit.router)
+api_router.include_router(dashboard.router)

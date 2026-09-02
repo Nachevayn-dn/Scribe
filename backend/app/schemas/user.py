@@ -28,5 +28,6 @@ class UserResponse(BaseModel):
     role: UserRole
     is_active: bool
     license_number: str | None
+    photo_url: str | None
 
     model_config = {"from_attributes": True}

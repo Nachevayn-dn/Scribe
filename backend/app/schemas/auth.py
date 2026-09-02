@@ -29,5 +29,6 @@ class CurrentUserResponse(BaseModel):
     full_name: str
     role: UserRole
     is_active: bool
+    photo_url: str | None
 
     model_config = {"from_attributes": True}

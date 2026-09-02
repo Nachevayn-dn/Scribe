@@ -5,11 +5,18 @@ export function listEncounters(filters?: { patient_id?: string; provider_id?: st
   return api.get<Encounter[]>("/encounters", filters);
 }
 
-export function startEncounter(patientId: string, providerId: string, language?: string) {
+export function startEncounter(
+  patientId: string,
+  providerId: string,
+  language?: string,
+  scheduled?: { isScheduledAppointment: boolean; appointmentTime?: string },
+) {
   return api.post<Encounter>("/encounters", {
     patient_id: patientId,
     provider_id: providerId,
     language: language ?? null,
+    is_scheduled_appointment: scheduled?.isScheduledAppointment ?? false,
+    appointment_time: scheduled?.appointmentTime ?? null,
   });
 }
 

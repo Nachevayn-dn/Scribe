@@ -17,6 +17,7 @@ services:
       CORS_ORIGINS: '["https://${DOMAIN}"]'
     volumes: !override
       - audio_data:/app/data/audio
+      - avatar_data:/app/data/avatars
     ports: !reset []
     restart: unless-stopped
 

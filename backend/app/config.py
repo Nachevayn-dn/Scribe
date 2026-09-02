@@ -34,6 +34,7 @@ class Settings(BaseSettings):
 
     # Storage
     audio_storage_dir: str = "./data/audio"
+    avatar_storage_dir: str = "./data/avatars"
 
 
 @lru_cache

@@ -12,6 +12,10 @@ class EncounterCreateRequest(BaseModel):
     # ISO-639-1 code, e.g. "en", "bg" — the language the provider picks for
     # this visit. Optional: omit to let the transcription provider auto-detect.
     language: str | None = None
+    # Marks this session as covering a scheduled appointment rather than an
+    # ad-hoc/walk-in visit — see Encounter.is_scheduled_appointment.
+    is_scheduled_appointment: bool = False
+    appointment_time: datetime | None = None
 
 
 class EncounterResponse(BaseModel):
@@ -23,6 +27,8 @@ class EncounterResponse(BaseModel):
     status: EncounterStatus
     failure_reason: str | None
     language: str | None
+    is_scheduled_appointment: bool
+    appointment_time: datetime | None
     started_at: datetime
     ended_at: datetime | None
 

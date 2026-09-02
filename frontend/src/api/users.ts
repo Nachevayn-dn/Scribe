@@ -23,6 +23,12 @@ export function updateUser(id: string, payload: Partial<Pick<User, "full_name" |
   return api.patch<User>(`/users/${id}`, payload);
 }
 
+export function uploadMyPhoto(file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  return api.postForm<User>("/users/me/photo", form);
+}
+
 export function assignAssistant(providerId: string, assistantId: string) {
   return api.post<{ status: string }>(`/users/${providerId}/assistants/${assistantId}`);
 }

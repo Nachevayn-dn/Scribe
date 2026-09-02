@@ -15,6 +15,7 @@ interface AuthContextValue {
     admin_full_name: string;
   }) => Promise<void>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -70,7 +71,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, signupClinic, logout }}>
+    <AuthContext.Provider
+      value={{ user, loading, login, signupClinic, logout, refreshUser: refreshMe }}
+    >
       {children}
     </AuthContext.Provider>
   );

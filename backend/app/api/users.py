@@ -1,18 +1,21 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, File, Request, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import ConflictError, NotFoundError
+from app.core.exceptions import BadRequestError, ConflictError, NotFoundError
 from app.core.security import hash_password
 from app.database import get_db
 from app.deps import client_ip, get_current_user, require_role
 from app.models.user import ProviderAssistant, User, UserRole
 from app.schemas.user import UserCreateRequest, UserResponse, UserUpdateRequest
 from app.services.audit_service import log_action
+from app.services.avatar_storage import save_avatar
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+_MAX_AVATAR_BYTES = 5 * 1024 * 1024  # 5 MB
 
 
 @router.get("", response_model=list[UserResponse])
@@ -57,6 +60,38 @@ async def my_assigned_providers(
         )
     )
     return list(result.scalars().all())
+
+
+@router.post("/me/photo", response_model=UserResponse)
+async def upload_my_photo(
+    request: Request,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    content = await file.read()
+    if len(content) > _MAX_AVATAR_BYTES:
+        raise BadRequestError("Image must be 5 MB or smaller")
+
+    mime_type = file.content_type or ""
+    try:
+        photo_url = save_avatar(current_user.id, content, mime_type)
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
+
+    current_user.photo_url = photo_url
+    await log_action(
+        db,
+        clinic_id=current_user.clinic_id,
+        actor_user_id=current_user.id,
+        action="USER_PHOTO_UPDATED",
+        resource_type="User",
+        resource_id=str(current_user.id),
+        ip_address=client_ip(request),
+    )
+    await db.commit()
+    await db.refresh(current_user)
+    return current_user
 
 
 @router.post("", response_model=UserResponse, status_code=201)

@@ -5,7 +5,7 @@ import { NavBar } from "./components/layout/NavBar";
 import { LoginPage } from "./pages/LoginPage";
 import { SignupClinicPage } from "./pages/SignupClinicPage";
 import { PatientListPage } from "./pages/PatientListPage";
-import { ProviderDashboard } from "./pages/ProviderDashboard";
+import { DashboardPage } from "./pages/DashboardPage";
 import { EncounterRecordingPage } from "./pages/EncounterRecordingPage";
 import { ClinicAdminDashboard } from "./pages/ClinicAdminDashboard";
 import { PreferencesSettingsPage } from "./pages/PreferencesSettingsPage";
@@ -22,7 +22,7 @@ function AppRoutes() {
           path="/"
           element={
             <RequireAuth>
-              <ProviderDashboard />
+              <DashboardPage />
             </RequireAuth>
           }
         />

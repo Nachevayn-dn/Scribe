@@ -7,6 +7,7 @@ export interface CurrentUser {
   full_name: string;
   role: UserRole;
   is_active: boolean;
+  photo_url: string | null;
 }
 
 export interface Clinic {
@@ -25,6 +26,7 @@ export interface User {
   role: UserRole;
   is_active: boolean;
   license_number: string | null;
+  photo_url: string | null;
 }
 
 export interface Patient {
@@ -58,8 +60,15 @@ export interface Encounter {
   // ISO-639-1 code chosen by the provider when starting the encounter
   // (see data/languages.ts) — null means auto-detect.
   language: string | null;
+  is_scheduled_appointment: boolean;
+  appointment_time: string | null;
   started_at: string;
   ended_at: string | null;
+}
+
+export interface DashboardSummary {
+  sessions_this_week: number;
+  scheduled_appointment_sessions_this_week: number;
 }
 
 export type EntityType = "MEDICATION" | "PROCEDURE" | "DIAGNOSTIC" | "SYMPTOM" | "ALLERGY";

@@ -27,6 +27,10 @@ class User(UUIDPkMixin, TimestampMixin, SoftDeleteMixin, Base):
     role: Mapped[UserRole] = mapped_column(Enum(UserRole, name="user_role"), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     license_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Relative URL (e.g. "/static/avatars/<file>") of an uploaded profile
+    # photo — served by the static mount in main.py. Null until the user
+    # uploads one (see POST /users/me/photo).
+    photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     clinic: Mapped["Clinic"] = relationship(back_populates="users", lazy="selectin")  # noqa: F821
 

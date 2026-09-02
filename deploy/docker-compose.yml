@@ -37,11 +37,13 @@ services:
       WHISPER_MODEL: ${WHISPER_MODEL:-whisper-1}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5}
       AUDIO_STORAGE_DIR: /app/data/audio
+      AVATAR_STORAGE_DIR: /app/data/avatars
     ports:
       - "8000:8000"
     volumes:
       - ../backend:/app
       - audio_data:/app/data/audio
+      - avatar_data:/app/data/avatars
     depends_on:
       postgres:
         condition: service_healthy
@@ -63,4 +65,5 @@ services:
 volumes:
   pgdata:
   audio_data:
+  avatar_data:
   frontend_node_modules:

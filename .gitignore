@@ -23,6 +23,8 @@ frontend/.vite/
 ## Data
 **/data/audio/*
 !/data/audio/.gitkeep
+**/data/avatars/*
+!/data/avatars/.gitkeep
 
 ## OS / editor
 .DS_Store

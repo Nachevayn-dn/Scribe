@@ -3,7 +3,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -49,6 +49,16 @@ class Encounter(UUIDPkMixin, TimestampMixin, Base):
     # through to the transcription provider as a hint (see
     # services/pipeline.py); null means "let Whisper auto-detect."
     language: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # Set when the provider marks this session as covering a scheduled
+    # appointment (vs. an ad-hoc/walk-in visit) — drives the "scheduled
+    # appointments" dashboard widget. appointment_time is optional context,
+    # not itself a calendar/booking feature.
+    is_scheduled_appointment: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    appointment_time: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default="now()"
     )

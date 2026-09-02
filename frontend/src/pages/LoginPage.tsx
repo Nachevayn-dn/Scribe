@@ -28,7 +28,7 @@ export function LoginPage() {
   return (
     <div className="page" style={{ maxWidth: 380, marginTop: 80 }}>
       <div className="card stack">
-        <h1 style={{ fontSize: 20, margin: 0 }}>🩺 Scribe — Sign in</h1>
+        <h1 style={{ fontSize: 20, margin: 0 }}>MedicDesk.ai — Sign in</h1>
         <form className="stack" onSubmit={handleSubmit}>
           <input
             className="input"

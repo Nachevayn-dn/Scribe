@@ -62,7 +62,14 @@ export function NoteEditorPage({ encounterId, note, canEdit, canSign, onNoteChan
     <div className="card stack">
       <div className="row" style={{ justifyContent: "space-between" }}>
         <strong>Clinical note</strong>
-        <span className="badge" style={{ background: note.status === "SIGNED" ? "#dcfce7" : "#eef2ff", color: note.status === "SIGNED" ? "#166534" : "#3730a3" }}>
+        <span
+          className="badge"
+          style={
+            note.status === "SIGNED"
+              ? { background: "rgba(74, 222, 128, 0.16)", color: "#4ade80" }
+              : undefined
+          }
+        >
           {note.status}
         </span>
       </div>
