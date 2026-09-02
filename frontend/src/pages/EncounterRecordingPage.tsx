@@ -9,10 +9,13 @@ import { AudioUploadStatus } from "../components/audio/AudioUploadStatus";
 import { EntityLegend } from "../components/notes/EntityLegend";
 import { TranscriptViewer } from "../components/notes/TranscriptViewer";
 import { ApiError } from "../api/client";
-import type { ClinicalNote, Encounter, NoteTemplate, Transcript } from "../types";
+import type { ClinicalNote, Encounter, EncounterStatus, NoteTemplate, Transcript } from "../types";
 import { NoteEditorPage } from "./NoteEditorPage";
 
 const POLL_INTERVAL_MS = 3000;
+
+// Once the pipeline reaches one of these, there's nothing left to poll for.
+const TERMINAL_STATUSES: EncounterStatus[] = ["TRANSCRIPT_READY", "NOTE_READY", "SIGNED", "FAILED"];
 
 export function EncounterRecordingPage() {
   const { encounterId } = useParams<{ encounterId: string }>();
@@ -25,6 +28,13 @@ export function EncounterRecordingPage() {
   const [uploading, setUploading] = useState(false);
   const [generating, setGenerating] = useState<string | null>(null); // template_id being generated
   const [error, setError] = useState<string | null>(null);
+  // True from the moment audio is uploaded until the pipeline reaches a
+  // terminal status — drives polling below. Distinct from
+  // encounter.status === "TRANSCRIBING" because there's a brief window
+  // right after upload where the background task hasn't flipped the status
+  // yet (it's still "IN_PROGRESS"); relying on status alone would skip that
+  // window and never start polling.
+  const [awaitingPipeline, setAwaitingPipeline] = useState(false);
   const pollRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -35,6 +45,8 @@ export function EncounterRecordingPage() {
     if (!encounterId) return;
     const e = await encountersApi.getEncounter(encounterId);
     setEncounter(e);
+    if (e.status === "TRANSCRIBING") setAwaitingPipeline(true);
+    if (TERMINAL_STATUSES.includes(e.status)) setAwaitingPipeline(false);
 
     const transcriptAvailable =
       e.status === "TRANSCRIPT_READY" || e.status === "NOTE_READY" || e.status === "SIGNED";
@@ -60,15 +72,12 @@ export function EncounterRecordingPage() {
   }, [loadEncounter]);
 
   useEffect(() => {
-    if (!encounter) return;
-    if (encounter.status === "TRANSCRIBING") {
-      pollRef.current = window.setInterval(loadEncounter, POLL_INTERVAL_MS);
-      return () => {
-        if (pollRef.current) window.clearInterval(pollRef.current);
-      };
-    }
-    if (pollRef.current) window.clearInterval(pollRef.current);
-  }, [encounter, loadEncounter]);
+    if (!awaitingPipeline) return;
+    pollRef.current = window.setInterval(loadEncounter, POLL_INTERVAL_MS);
+    return () => {
+      if (pollRef.current) window.clearInterval(pollRef.current);
+    };
+  }, [awaitingPipeline, loadEncounter]);
 
   async function handleRecordingReady(blob: Blob, filename: string) {
     if (!encounterId) return;
@@ -77,6 +86,10 @@ export function EncounterRecordingPage() {
     try {
       const updated = await encountersApi.uploadAudio(encounterId, blob, filename);
       setEncounter(updated);
+      setAwaitingPipeline(true);
+      // Don't wait for the first poll tick (up to POLL_INTERVAL_MS away) —
+      // check right away in case the pipeline is already done.
+      await loadEncounter();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to upload audio");
     } finally {
