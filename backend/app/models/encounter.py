@@ -13,6 +13,10 @@ from app.models.base import Base, TimestampMixin, UUIDPkMixin
 class EncounterStatus(str, enum.Enum):
     IN_PROGRESS = "IN_PROGRESS"
     TRANSCRIBING = "TRANSCRIBING"
+    # Transcript is ready and shown to the provider; the pipeline stops here
+    # deliberately — note generation is a separate, doctor-initiated step
+    # (see POST /encounters/{id}/note/generate) rather than automatic.
+    TRANSCRIPT_READY = "TRANSCRIPT_READY"
     EXTRACTING = "EXTRACTING"
     NOTE_READY = "NOTE_READY"
     SIGNED = "SIGNED"

@@ -72,24 +72,20 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 
     app.dependency_overrides[get_db] = _override_get_db
 
-    # BackgroundTasks (the audio-upload pipeline, note regeneration) don't go
-    # through FastAPI's dependency injection, so they'd otherwise open a
-    # session against the real dev database via these modules' module-level
-    # AsyncSessionLocal. Point them at the test DB for the duration of the test.
-    import app.api.notes as notes_module
+    # The audio-upload BackgroundTask (services.pipeline) doesn't go through
+    # FastAPI's dependency injection, so it'd otherwise open a session
+    # against the real dev database via its module-level AsyncSessionLocal.
+    # Point it at the test DB for the duration of the test.
     import app.services.pipeline as pipeline_module
 
-    patched_modules = [pipeline_module, notes_module]
-    originals = [m.AsyncSessionLocal for m in patched_modules]
-    for m in patched_modules:
-        m.AsyncSessionLocal = TestSessionLocal
+    original_session_local = pipeline_module.AsyncSessionLocal
+    pipeline_module.AsyncSessionLocal = TestSessionLocal
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
 
-    for m, original in zip(patched_modules, originals):
-        m.AsyncSessionLocal = original
+    pipeline_module.AsyncSessionLocal = original_session_local
     app.dependency_overrides.clear()
 
 

@@ -20,17 +20,12 @@ export function signNote(encounterId: string) {
   return api.post<ClinicalNote>(`/encounters/${encounterId}/note/sign`);
 }
 
-export function regenerateNote(encounterId: string, templateId?: string) {
-  return api.post<{ status: string }>(
-    `/encounters/${encounterId}/note/regenerate`,
-    undefined,
-    { template_id: templateId },
-  );
-}
-
-export function renderNote(encounterId: string, templateId: string) {
+/** Doctor-initiated: generate (or regenerate, against a different template)
+ * the clinical note from the encounter's transcript. Synchronous — a single
+ * Claude call, fast enough to just await. */
+export function generateNote(encounterId: string, templateId: string) {
   return api.post<ClinicalNote>(
-    `/encounters/${encounterId}/note/render`,
+    `/encounters/${encounterId}/note/generate`,
     undefined,
     { template_id: templateId },
   );

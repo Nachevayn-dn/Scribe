@@ -17,10 +17,8 @@ export function endEncounter(id: string) {
   return api.patch<Encounter>(`/encounters/${id}`, {});
 }
 
-export function uploadAudio(encounterId: string, file: Blob, filename: string, templateId?: string) {
+export function uploadAudio(encounterId: string, file: Blob, filename: string) {
   const form = new FormData();
   form.append("file", file, filename);
-  return api.postForm<Encounter>(`/encounters/${encounterId}/audio`, form, {
-    template_id: templateId,
-  });
+  return api.postForm<Encounter>(`/encounters/${encounterId}/audio`, form);
 }

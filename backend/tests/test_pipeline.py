@@ -1,6 +1,7 @@
-"""Audio upload -> transcription -> extraction pipeline, with the OpenAI
-Whisper and Anthropic Claude calls mocked out so tests never hit the
-network / need real API keys."""
+"""Audio upload -> transcription pipeline (stops at TRANSCRIPT_READY), and
+the separate doctor-initiated note generation step, with the OpenAI Whisper
+and Anthropic Claude calls mocked out so tests never hit the network / need
+real API keys."""
 import asyncio
 from unittest.mock import AsyncMock, patch
 
@@ -29,8 +30,6 @@ FAKE_EXTRACTION = ExtractionResult(
 )
 
 
-
-
 async def _start_encounter(client: AsyncClient, admin_headers: dict, provider_headers: dict, provider_id: str) -> str:
     patient_resp = await client.post(
         "/api/v1/patients",
@@ -47,7 +46,16 @@ async def _start_encounter(client: AsyncClient, admin_headers: dict, provider_he
     return encounter_resp.json()["id"]
 
 
-async def test_audio_upload_runs_pipeline_to_note_ready(client: AsyncClient):
+async def _get_global_template_id(client: AsyncClient, headers: dict, template_type: str) -> str:
+    resp = await client.get("/api/v1/templates", headers=headers)
+    assert resp.status_code == 200
+    match = next(t for t in resp.json() if t["template_type"] == template_type)
+    return match["id"]
+
+
+async def test_audio_upload_stops_at_transcript_ready_without_a_note(client: AsyncClient):
+    """Uploading audio should produce a transcript but NOT auto-generate a
+    note — note generation is a separate, doctor-initiated step."""
     admin = await signup_clinic(client)
     provider = await create_user(client, admin["headers"], role="PROVIDER")
     encounter_id = await _start_encounter(
@@ -60,12 +68,8 @@ async def test_audio_upload_runs_pipeline_to_note_ready(client: AsyncClient):
         provider_name="openai-whisper-1",
     )
 
-    with (
-        patch("app.services.pipeline.OpenAIWhisperProvider") as mock_whisper_cls,
-        patch("app.services.extraction_step.AnthropicExtractionProvider") as mock_claude_cls,
-    ):
+    with patch("app.services.pipeline.OpenAIWhisperProvider") as mock_whisper_cls:
         mock_whisper_cls.return_value.transcribe = AsyncMock(return_value=fake_result)
-        mock_claude_cls.return_value.extract = AsyncMock(return_value=FAKE_EXTRACTION)
 
         upload_resp = await client.post(
             f"/api/v1/encounters/{encounter_id}/audio",
@@ -81,11 +85,11 @@ async def test_audio_upload_runs_pipeline_to_note_ready(client: AsyncClient):
             status_resp = await client.get(
                 f"/api/v1/encounters/{encounter_id}", headers=provider["headers"]
             )
-            if status_resp.json()["status"] in ("NOTE_READY", "FAILED"):
+            if status_resp.json()["status"] in ("TRANSCRIPT_READY", "FAILED"):
                 break
             await asyncio.sleep(0.05)
 
-    assert status_resp.json()["status"] == "NOTE_READY", status_resp.json()
+    assert status_resp.json()["status"] == "TRANSCRIPT_READY", status_resp.json()
 
     transcript_resp = await client.get(
         f"/api/v1/encounters/{encounter_id}/transcript", headers=provider["headers"]
@@ -93,14 +97,62 @@ async def test_audio_upload_runs_pipeline_to_note_ready(client: AsyncClient):
     assert transcript_resp.status_code == 200
     assert "tooth pain" in transcript_resp.json()["raw_text"]
 
+    # No note yet — generation hasn't been requested.
     note_resp = await client.get(
         f"/api/v1/encounters/{encounter_id}/note", headers=provider["headers"]
     )
-    assert note_resp.status_code == 200
-    note = note_resp.json()
+    assert note_resp.status_code == 404
+
+
+async def test_generate_note_produces_entity_tagged_note(client: AsyncClient):
+    admin = await signup_clinic(client)
+    provider = await create_user(client, admin["headers"], role="PROVIDER")
+    encounter_id = await _start_encounter(
+        client, admin["headers"], provider["headers"], provider["id"]
+    )
+
+    fake_result = TranscriptionResult(
+        text="Patient reports tooth pain on the lower left molar.",
+        language="en",
+        provider_name="openai-whisper-1",
+    )
+
+    with patch("app.services.pipeline.OpenAIWhisperProvider") as mock_whisper_cls:
+        mock_whisper_cls.return_value.transcribe = AsyncMock(return_value=fake_result)
+        await client.post(
+            f"/api/v1/encounters/{encounter_id}/audio",
+            headers=provider["headers"],
+            files={"file": ("recording.webm", b"fake-audio-bytes", "audio/webm")},
+        )
+        for _ in range(20):
+            status_resp = await client.get(
+                f"/api/v1/encounters/{encounter_id}", headers=provider["headers"]
+            )
+            if status_resp.json()["status"] in ("TRANSCRIPT_READY", "FAILED"):
+                break
+            await asyncio.sleep(0.05)
+    assert status_resp.json()["status"] == "TRANSCRIPT_READY"
+
+    template_id = await _get_global_template_id(client, provider["headers"], "CLINICAL_SUMMARY")
+
+    with patch("app.services.extraction_step.AnthropicExtractionProvider") as mock_claude_cls:
+        mock_claude_cls.return_value.extract = AsyncMock(return_value=FAKE_EXTRACTION)
+        generate_resp = await client.post(
+            f"/api/v1/encounters/{encounter_id}/note/generate",
+            headers=provider["headers"],
+            params={"template_id": template_id},
+        )
+
+    assert generate_resp.status_code == 200, generate_resp.text
+    note = generate_resp.json()
     assert "Recommend a CBCT scan." in note["rendered_content"]
     entity_types = {e["entity_type"] for e in note["entities"]}
     assert entity_types == {"SYMPTOM", "DIAGNOSTIC"}
+
+    status_resp = await client.get(
+        f"/api/v1/encounters/{encounter_id}", headers=provider["headers"]
+    )
+    assert status_resp.json()["status"] == "NOTE_READY"
 
 
 async def test_active_doctor_preferences_reach_the_extraction_call(client: AsyncClient):
@@ -121,14 +173,8 @@ async def test_active_doctor_preferences_reach_the_extraction_call(client: Async
         text="Patient reports tooth pain.", language="en", provider_name="openai-whisper-1"
     )
 
-    with (
-        patch("app.services.pipeline.OpenAIWhisperProvider") as mock_whisper_cls,
-        patch("app.services.extraction_step.AnthropicExtractionProvider") as mock_claude_cls,
-    ):
+    with patch("app.services.pipeline.OpenAIWhisperProvider") as mock_whisper_cls:
         mock_whisper_cls.return_value.transcribe = AsyncMock(return_value=fake_transcript)
-        extract_mock = AsyncMock(return_value=FAKE_EXTRACTION)
-        mock_claude_cls.return_value.extract = extract_mock
-
         await client.post(
             f"/api/v1/encounters/{encounter_id}/audio",
             headers=provider["headers"],
@@ -138,17 +184,39 @@ async def test_active_doctor_preferences_reach_the_extraction_call(client: Async
             status_resp = await client.get(
                 f"/api/v1/encounters/{encounter_id}", headers=provider["headers"]
             )
-            if status_resp.json()["status"] in ("NOTE_READY", "FAILED"):
+            if status_resp.json()["status"] in ("TRANSCRIPT_READY", "FAILED"):
                 break
             await asyncio.sleep(0.05)
+    assert status_resp.json()["status"] == "TRANSCRIPT_READY"
 
-    assert status_resp.json()["status"] == "NOTE_READY", status_resp.json()
+    with patch("app.services.extraction_step.AnthropicExtractionProvider") as mock_claude_cls:
+        extract_mock = AsyncMock(return_value=FAKE_EXTRACTION)
+        mock_claude_cls.return_value.extract = extract_mock
+
+        # No template_id override — omit it to exercise the default
+        # (global Clinical Summary) template selection.
+        generate_resp = await client.post(
+            f"/api/v1/encounters/{encounter_id}/note/generate",
+            headers=provider["headers"],
+        )
+
+    assert generate_resp.status_code == 422  # template_id is required now
+    template_id = await _get_global_template_id(client, provider["headers"], "CLINICAL_SUMMARY")
+
+    with patch("app.services.extraction_step.AnthropicExtractionProvider") as mock_claude_cls:
+        extract_mock = AsyncMock(return_value=FAKE_EXTRACTION)
+        mock_claude_cls.return_value.extract = extract_mock
+        generate_resp = await client.post(
+            f"/api/v1/encounters/{encounter_id}/note/generate",
+            headers=provider["headers"],
+            params={"template_id": template_id},
+        )
+
+    assert generate_resp.status_code == 200, generate_resp.text
     extract_mock.assert_awaited_once()
     _, call_preferences, call_template = extract_mock.await_args.args
     assert len(call_preferences) == 1
     assert call_preferences[0].instruction == "always suggest a CBCT scan"
-    # No template_id was specified on upload, so the default global
-    # Clinical Summary template should have been selected.
     assert call_template is not None
     assert call_template.name == "Clinical Summary"
 
@@ -176,10 +244,57 @@ async def test_audio_upload_marks_failed_on_transcription_error(client: AsyncCli
             status_resp = await client.get(
                 f"/api/v1/encounters/{encounter_id}", headers=provider["headers"]
             )
-            if status_resp.json()["status"] in ("NOTE_READY", "FAILED"):
+            if status_resp.json()["status"] in ("TRANSCRIPT_READY", "FAILED"):
                 break
             await asyncio.sleep(0.05)
 
     body = status_resp.json()
     assert body["status"] == "FAILED"
     assert "upstream Whisper API error" in body["failure_reason"]
+
+
+async def test_generate_note_marks_failed_cleanly_on_extraction_error(client: AsyncClient):
+    admin = await signup_clinic(client)
+    provider = await create_user(client, admin["headers"], role="PROVIDER")
+    encounter_id = await _start_encounter(
+        client, admin["headers"], provider["headers"], provider["id"]
+    )
+    fake_result = TranscriptionResult(
+        text="Patient reports tooth pain.", language="en", provider_name="openai-whisper-1"
+    )
+    with patch("app.services.pipeline.OpenAIWhisperProvider") as mock_whisper_cls:
+        mock_whisper_cls.return_value.transcribe = AsyncMock(return_value=fake_result)
+        await client.post(
+            f"/api/v1/encounters/{encounter_id}/audio",
+            headers=provider["headers"],
+            files={"file": ("recording.webm", b"fake-audio-bytes", "audio/webm")},
+        )
+        for _ in range(20):
+            status_resp = await client.get(
+                f"/api/v1/encounters/{encounter_id}", headers=provider["headers"]
+            )
+            if status_resp.json()["status"] in ("TRANSCRIPT_READY", "FAILED"):
+                break
+            await asyncio.sleep(0.05)
+    assert status_resp.json()["status"] == "TRANSCRIPT_READY"
+
+    template_id = await _get_global_template_id(client, provider["headers"], "CLINICAL_SUMMARY")
+
+    with patch("app.services.extraction_step.AnthropicExtractionProvider") as mock_claude_cls:
+        mock_claude_cls.return_value.extract = AsyncMock(
+            side_effect=RuntimeError("upstream Claude API error")
+        )
+        generate_resp = await client.post(
+            f"/api/v1/encounters/{encounter_id}/note/generate",
+            headers=provider["headers"],
+            params={"template_id": template_id},
+        )
+
+    assert generate_resp.status_code == 502
+
+    status_resp = await client.get(
+        f"/api/v1/encounters/{encounter_id}", headers=provider["headers"]
+    )
+    body = status_resp.json()
+    assert body["status"] == "FAILED"
+    assert "upstream Claude API error" in body["failure_reason"]

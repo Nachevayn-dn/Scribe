@@ -3,6 +3,7 @@ import type { EncounterStatus } from "../../types";
 const LABELS: Record<EncounterStatus, string> = {
   IN_PROGRESS: "Ready to record",
   TRANSCRIBING: "Transcribing audio…",
+  TRANSCRIPT_READY: "Transcript ready — review below",
   EXTRACTING: "Generating clinical note…",
   NOTE_READY: "Note ready",
   SIGNED: "Note signed",

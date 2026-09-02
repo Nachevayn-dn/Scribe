@@ -28,12 +28,8 @@ async def _ready_encounter(client: AsyncClient, admin_headers: dict, provider: d
     fake_transcript = TranscriptionResult(
         text="Patient reports tooth pain.", language="en", provider_name="openai-whisper-1"
     )
-    with (
-        patch("app.services.pipeline.OpenAIWhisperProvider") as mock_whisper_cls,
-        patch("app.services.extraction_step.AnthropicExtractionProvider") as mock_claude_cls,
-    ):
+    with patch("app.services.pipeline.OpenAIWhisperProvider") as mock_whisper_cls:
         mock_whisper_cls.return_value.transcribe = AsyncMock(return_value=fake_transcript)
-        mock_claude_cls.return_value.extract = AsyncMock(return_value=FAKE_EXTRACTION)
 
         await client.post(
             f"/api/v1/encounters/{encounter_id}/audio",
@@ -44,11 +40,24 @@ async def _ready_encounter(client: AsyncClient, admin_headers: dict, provider: d
             status_resp = await client.get(
                 f"/api/v1/encounters/{encounter_id}", headers=provider["headers"]
             )
-            if status_resp.json()["status"] in ("NOTE_READY", "FAILED"):
+            if status_resp.json()["status"] in ("TRANSCRIPT_READY", "FAILED"):
                 break
             await asyncio.sleep(0.05)
+    assert status_resp.json()["status"] == "TRANSCRIPT_READY", status_resp.json()
 
-    assert status_resp.json()["status"] == "NOTE_READY", status_resp.json()
+    templates_resp = await client.get("/api/v1/templates", headers=provider["headers"])
+    template_id = next(
+        t["id"] for t in templates_resp.json() if t["template_type"] == "CLINICAL_SUMMARY"
+    )
+
+    with patch("app.services.extraction_step.AnthropicExtractionProvider") as mock_claude_cls:
+        mock_claude_cls.return_value.extract = AsyncMock(return_value=FAKE_EXTRACTION)
+        generate_resp = await client.post(
+            f"/api/v1/encounters/{encounter_id}/note/generate",
+            headers=provider["headers"],
+            params={"template_id": template_id},
+        )
+    assert generate_resp.status_code == 200, generate_resp.text
     return encounter_id
 
 

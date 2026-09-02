@@ -41,6 +41,7 @@ export interface Patient {
 export type EncounterStatus =
   | "IN_PROGRESS"
   | "TRANSCRIBING"
+  | "TRANSCRIPT_READY"
   | "EXTRACTING"
   | "NOTE_READY"
   | "SIGNED"

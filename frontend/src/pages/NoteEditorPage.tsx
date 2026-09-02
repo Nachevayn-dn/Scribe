@@ -27,7 +27,7 @@ export function NoteEditorPage({ encounterId, note, canEdit, canSign, onNoteChan
     setSwitchingTemplate(true);
     setError(null);
     try {
-      const updated = await notesApi.renderNote(encounterId, templateId);
+      const updated = await notesApi.generateNote(encounterId, templateId);
       onNoteChange(updated);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to switch template");

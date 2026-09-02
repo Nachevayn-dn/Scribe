@@ -1,12 +1,17 @@
-"""Orchestrates the audio -> transcript -> structured note pipeline.
+"""Orchestrates the audio -> transcript pipeline.
 
 Runs as a FastAPI BackgroundTask after POST /encounters/{id}/audio returns,
 so it opens its own DB session rather than reusing the request-scoped one.
 
+Deliberately stops once the transcript is ready — clinical note generation
+is a separate, doctor-initiated step (see api/notes.py's
+POST /note/generate), not automatic. This lets the provider read the raw
+transcript first and choose which template(s) to generate from it.
+
 No task queue (Celery/RQ + Redis) for the MVP — a single in-process
 BackgroundTask is enough at this scale. If we ever need multi-instance
 workers or retry-with-backoff, this function is the seam to swap: the
-Whisper/Claude calls and the status-transition logic below would move into
+Whisper call and the status-transition logic below would move into
 a Celery task with the same signature.
 """
 import logging
@@ -19,7 +24,6 @@ from app.models.encounter import AudioFile, Encounter, EncounterStatus
 from app.models.transcript import Transcript
 from app.services import storage
 from app.services.audit_service import log_action
-from app.services.extraction_step import run_extraction
 from app.services.transcription.whisper_provider import OpenAIWhisperProvider
 
 logger = logging.getLogger(__name__)
@@ -32,7 +36,7 @@ async def _fail(db, encounter: Encounter, reason: str) -> None:
     logger.error("Encounter %s pipeline failed: %s", encounter.id, reason)
 
 
-async def run_pipeline(encounter_id: uuid.UUID, template_id: uuid.UUID | None = None) -> None:
+async def run_pipeline(encounter_id: uuid.UUID) -> None:
     async with AsyncSessionLocal() as db:
         encounter = (
             await db.execute(select(Encounter).where(Encounter.id == encounter_id))
@@ -79,10 +83,8 @@ async def run_pipeline(encounter_id: uuid.UUID, template_id: uuid.UUID | None = 
                 metadata={"provider": result.provider_name},
             )
 
-            encounter.status = EncounterStatus.EXTRACTING
+            encounter.status = EncounterStatus.TRANSCRIPT_READY
             await db.commit()
-
-            await run_extraction(db, encounter, transcript, template_id=template_id)
 
         except Exception as exc:  # noqa: BLE001 — pipeline must never crash silently
             await db.rollback()

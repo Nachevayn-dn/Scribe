@@ -2,12 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import * as encountersApi from "../api/encounters";
 import * as notesApi from "../api/notes";
+import * as templatesApi from "../api/templates";
 import { useAuth } from "../auth/AuthContext";
 import { AudioRecorder } from "../components/audio/AudioRecorder";
 import { AudioUploadStatus } from "../components/audio/AudioUploadStatus";
-import { TemplateSelectorPanel } from "../components/notes/TemplateSelectorPanel";
+import { TranscriptViewer } from "../components/notes/TranscriptViewer";
 import { ApiError } from "../api/client";
-import type { ClinicalNote, Encounter } from "../types";
+import type { ClinicalNote, Encounter, NoteTemplate, Transcript } from "../types";
 import { NoteEditorPage } from "./NoteEditorPage";
 
 const POLL_INTERVAL_MS = 3000;
@@ -17,22 +18,37 @@ export function EncounterRecordingPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [encounter, setEncounter] = useState<Encounter | null>(null);
+  const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [note, setNote] = useState<ClinicalNote | null>(null);
+  const [templates, setTemplates] = useState<NoteTemplate[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [generating, setGenerating] = useState<string | null>(null); // template_id being generated
   const [error, setError] = useState<string | null>(null);
-  const [templateId, setTemplateId] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    templatesApi.listTemplates().then(setTemplates).catch(() => setTemplates([]));
+  }, []);
 
   const loadEncounter = useCallback(async () => {
     if (!encounterId) return;
     const e = await encountersApi.getEncounter(encounterId);
     setEncounter(e);
+
+    const transcriptAvailable =
+      e.status === "TRANSCRIPT_READY" || e.status === "NOTE_READY" || e.status === "SIGNED";
+    if (transcriptAvailable) {
+      try {
+        setTranscript(await notesApi.getTranscript(encounterId));
+      } catch {
+        // briefly not persisted yet
+      }
+    }
     if (e.status === "NOTE_READY" || e.status === "SIGNED") {
       try {
-        const n = await notesApi.getNote(encounterId);
-        setNote(n);
+        setNote(await notesApi.getNote(encounterId));
       } catch {
-        // note briefly not persisted yet; next poll will pick it up
+        // briefly not persisted yet
       }
     }
     return e;
@@ -44,17 +60,13 @@ export function EncounterRecordingPage() {
 
   useEffect(() => {
     if (!encounter) return;
-    const busy = encounter.status === "IN_PROGRESS" || encounter.status === "TRANSCRIBING" || encounter.status === "EXTRACTING";
-    if (!busy) {
-      if (pollRef.current) window.clearInterval(pollRef.current);
-      return;
-    }
-    if (encounter.status === "TRANSCRIBING" || encounter.status === "EXTRACTING") {
+    if (encounter.status === "TRANSCRIBING") {
       pollRef.current = window.setInterval(loadEncounter, POLL_INTERVAL_MS);
       return () => {
         if (pollRef.current) window.clearInterval(pollRef.current);
       };
     }
+    if (pollRef.current) window.clearInterval(pollRef.current);
   }, [encounter, loadEncounter]);
 
   async function handleRecordingReady(blob: Blob, filename: string) {
@@ -62,7 +74,7 @@ export function EncounterRecordingPage() {
     setUploading(true);
     setError(null);
     try {
-      const updated = await encountersApi.uploadAudio(encounterId, blob, filename, templateId ?? undefined);
+      const updated = await encountersApi.uploadAudio(encounterId, blob, filename);
       setEncounter(updated);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to upload audio");
@@ -71,11 +83,30 @@ export function EncounterRecordingPage() {
     }
   }
 
+  async function handleGenerate(templateId: string) {
+    if (!encounterId) return;
+    setGenerating(templateId);
+    setError(null);
+    try {
+      const generatedNote = await notesApi.generateNote(encounterId, templateId);
+      setNote(generatedNote);
+      await loadEncounter(); // picks up encounter.status -> NOTE_READY
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to generate note");
+    } finally {
+      setGenerating(null);
+    }
+  }
+
   if (!encounter) return <div className="page">Loading…</div>;
 
   const canEdit =
     user?.role === "SUPER_ADMIN" || user?.role === "PROVIDER" || user?.role === "ASSISTANT";
   const canSign = user?.role === "PROVIDER" && user.id === encounter.provider_id;
+  const canGenerate = canEdit; // same roles that can start/edit an encounter
+
+  const clinicalSummary = templates.find((t) => t.template_type === "CLINICAL_SUMMARY");
+  const referralLetter = templates.find((t) => t.template_type === "REFERRAL_LETTER");
 
   return (
     <div className="page stack">
@@ -88,17 +119,42 @@ export function EncounterRecordingPage() {
         <AudioUploadStatus status={encounter.status} failureReason={encounter.failure_reason} />
         {error && <div className="error-text">{error}</div>}
         {encounter.status === "IN_PROGRESS" && (
-          <>
-            <TemplateSelectorPanel
-              value={templateId}
-              onChange={setTemplateId}
-              disabled={uploading}
-              label="Note template"
-            />
-            <AudioRecorder disabled={uploading} onRecordingReady={handleRecordingReady} />
-          </>
+          <AudioRecorder disabled={uploading} onRecordingReady={handleRecordingReady} />
         )}
       </div>
+
+      {transcript && (
+        <div className="card stack">
+          <strong>Transcript</strong>
+          <div style={{ maxHeight: 320, overflowY: "auto" }}>
+            <TranscriptViewer text={transcript.raw_text} />
+          </div>
+
+          {encounter.status === "TRANSCRIPT_READY" && canGenerate && (
+            <div className="stack" style={{ borderTop: "1px solid var(--color-border)", paddingTop: 12 }}>
+              <span style={{ fontSize: 13, color: "var(--color-text-muted)" }}>
+                Recording's done — generate whichever the visit needs:
+              </span>
+              <div className="row">
+                <button
+                  className="btn btn-primary"
+                  disabled={!clinicalSummary || generating !== null}
+                  onClick={() => clinicalSummary && handleGenerate(clinicalSummary.id)}
+                >
+                  {generating === clinicalSummary?.id ? "Generating…" : "Generate Clinical Summary"}
+                </button>
+                <button
+                  className="btn btn-primary"
+                  disabled={!referralLetter || generating !== null}
+                  onClick={() => referralLetter && handleGenerate(referralLetter.id)}
+                >
+                  {generating === referralLetter?.id ? "Generating…" : "Generate Referral Letter"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {note && (
         <NoteEditorPage

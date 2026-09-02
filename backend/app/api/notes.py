@@ -1,17 +1,16 @@
 """Transcript + clinical note endpoints for an encounter: view, edit, sign,
-regenerate, and re-render against a different template."""
+and doctor-initiated note generation from an already-transcribed encounter."""
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.core.permissions import user_can_access_encounter, user_can_sign_note
-from app.database import AsyncSessionLocal, get_db
+from app.database import get_db
 from app.deps import client_ip, get_current_user
-from app.jobs.background import run_pipeline_task
 from app.models.clinical_note import ClinicalNote, NoteStatus
 from app.models.encounter import Encounter, EncounterStatus
 from app.models.transcript import Transcript
@@ -39,11 +38,15 @@ async def _get_accessible_encounter(
     return encounter
 
 
-async def _get_note(db: AsyncSession, encounter_id: uuid.UUID) -> ClinicalNote:
+async def _get_note_optional(db: AsyncSession, encounter_id: uuid.UUID) -> ClinicalNote | None:
     result = await db.execute(
         select(ClinicalNote).where(ClinicalNote.encounter_id == encounter_id)
     )
-    note = result.scalar_one_or_none()
+    return result.scalar_one_or_none()
+
+
+async def _get_note(db: AsyncSession, encounter_id: uuid.UUID) -> ClinicalNote:
+    note = await _get_note_optional(db, encounter_id)
     if note is None:
         raise NotFoundError("Note not ready yet")
     return note
@@ -165,64 +168,56 @@ async def sign_note(
     return note
 
 
-@router.post("/{encounter_id}/note/regenerate")
-async def regenerate_note(
+@router.post("/{encounter_id}/note/generate", response_model=ClinicalNoteResponse)
+async def generate_note(
     encounter_id: uuid.UUID,
-    background_tasks: BackgroundTasks,
-    template_id: uuid.UUID | None = Query(default=None),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> dict:
-    encounter = await _get_accessible_encounter(db, current_user, encounter_id)
-    existing_note = await _get_note(db, encounter_id)
-    if existing_note.status == NoteStatus.SIGNED:
-        raise ConflictError("A signed note cannot be regenerated")
-
-    await _get_latest_transcript(db, encounter_id)  # 404s clearly if missing
-    await db.delete(existing_note)
-    encounter.status = EncounterStatus.EXTRACTING
-    await db.commit()
-
-    background_tasks.add_task(_regenerate_task, encounter_id, template_id)
-    return {"status": EncounterStatus.EXTRACTING.value}
-
-
-async def _regenerate_task(encounter_id: uuid.UUID, template_id: uuid.UUID | None) -> None:
-    async with AsyncSessionLocal() as db:
-        encounter = (
-            await db.execute(select(Encounter).where(Encounter.id == encounter_id))
-        ).scalar_one()
-        transcript = await _get_latest_transcript(db, encounter_id)
-        try:
-            await run_extraction(db, encounter, transcript, template_id=template_id)
-        except Exception as exc:  # noqa: BLE001
-            await db.rollback()
-            encounter.status = EncounterStatus.FAILED
-            encounter.failure_reason = str(exc)
-            await db.commit()
-
-
-@router.post("/{encounter_id}/note/render", response_model=ClinicalNoteResponse)
-async def render_note(
-    encounter_id: uuid.UUID,
-    template_id: uuid.UUID = Query(...),
+    request: Request,
+    template_id: uuid.UUID = Query(..., description="Which template to generate against"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ClinicalNote:
-    """Re-renders the note against a different template.
+    """Doctor-initiated note generation from the encounter's transcript.
 
-    Our extraction output doesn't retain section boundaries separately from
-    line content, so a genuine re-organization needs one more (cheap, single)
-    extraction call against the already-fetched transcript — this endpoint
-    does that synchronously rather than re-running the full audio pipeline.
+    Works whether this is the first time (encounter just reached
+    TRANSCRIPT_READY, no note exists yet — e.g. clicking "Generate Clinical
+    Summary" or "Generate Referral Letter") or a later re-generation against
+    a different template (an existing DRAFT note is replaced). Runs
+    synchronously — a single Claude call, fast enough not to need a
+    background task like the audio pipeline does.
     """
     encounter = await _get_accessible_encounter(db, current_user, encounter_id)
-    existing_note = await _get_note(db, encounter_id)
-    if existing_note.status == NoteStatus.SIGNED:
-        raise ConflictError("A signed note cannot be re-rendered")
+    existing_note = await _get_note_optional(db, encounter_id)
+    if existing_note is not None:
+        if existing_note.status == NoteStatus.SIGNED:
+            raise ConflictError("A signed note cannot be regenerated")
+        await db.delete(existing_note)
+        await db.flush()
 
     transcript = await _get_latest_transcript(db, encounter_id)
-    await db.delete(existing_note)
-    await db.flush()
-    await run_extraction(db, encounter, transcript, template_id=template_id)
+    encounter.status = EncounterStatus.EXTRACTING
+    await db.commit()
+
+    try:
+        await run_extraction(db, encounter, transcript, template_id=template_id)
+    except Exception as exc:  # noqa: BLE001 — surface a clean failure, not a 500
+        await db.rollback()
+        encounter = (
+            await db.execute(select(Encounter).where(Encounter.id == encounter_id))
+        ).scalar_one()
+        encounter.status = EncounterStatus.FAILED
+        encounter.failure_reason = str(exc)
+        await db.commit()
+        raise HTTPException(status_code=502, detail=f"Note generation failed: {exc}") from exc
+
+    await log_action(
+        db,
+        clinic_id=current_user.clinic_id,
+        actor_user_id=current_user.id,
+        action="NOTE_GENERATED",
+        resource_type="ClinicalNote",
+        resource_id=str(encounter_id),
+        metadata={"template_id": str(template_id)},
+        ip_address=client_ip(request),
+    )
+    await db.commit()
     return await _get_note(db, encounter_id)
