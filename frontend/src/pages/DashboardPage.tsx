@@ -59,7 +59,7 @@ export function DashboardPage() {
           label="Scheduled appointments"
           value={summary?.scheduled_appointment_sessions_this_week ?? 0}
           hint="Sessions marked as scheduled, last 7 days"
-          to="/sessions?range=week"
+          to="/sessions?range=week&scheduled=true"
         />
       </div>
 
