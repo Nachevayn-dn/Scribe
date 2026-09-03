@@ -7,6 +7,7 @@ import { SignupClinicPage } from "./pages/SignupClinicPage";
 import { PatientListPage } from "./pages/PatientListPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { EncounterRecordingPage } from "./pages/EncounterRecordingPage";
+import { SessionsListPage } from "./pages/SessionsListPage";
 import { ClinicAdminDashboard } from "./pages/ClinicAdminDashboard";
 import { PreferencesSettingsPage } from "./pages/PreferencesSettingsPage";
 import { IntegrationsPage } from "./pages/IntegrationsPage";
@@ -32,6 +33,14 @@ function AppRoutes() {
           element={
             <RequireAuth>
               <PatientListPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/sessions"
+          element={
+            <RequireAuth>
+              <SessionsListPage />
             </RequireAuth>
           }
         />

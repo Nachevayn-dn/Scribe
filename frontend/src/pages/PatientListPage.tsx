@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import * as patientsApi from "../api/patients";
 import * as usersApi from "../api/users";
 import { StartScribeSessionModal } from "../components/encounters/StartScribeSessionModal";
@@ -99,7 +99,9 @@ export function PatientListPage() {
             {patients.map((p) => (
               <tr key={p.id}>
                 <td>
-                  {p.first_name} {p.last_name}
+                  <Link to={`/sessions?patient_id=${p.id}`}>
+                    {p.first_name} {p.last_name}
+                  </Link>
                 </td>
                 <td>{p.date_of_birth}</td>
                 <td>{p.mrn ?? "—"}</td>

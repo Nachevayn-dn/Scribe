@@ -53,11 +53,13 @@ export function DashboardPage() {
           label="Scribe sessions this week"
           value={summary?.sessions_this_week ?? 0}
           hint="Last 7 days"
+          to="/sessions?range=week"
         />
         <StatWidget
           label="Scheduled appointments"
           value={summary?.scheduled_appointment_sessions_this_week ?? 0}
           hint="Sessions marked as scheduled, last 7 days"
+          to="/sessions?range=week"
         />
       </div>
 
@@ -82,7 +84,9 @@ export function DashboardPage() {
             {patients.map((p) => (
               <tr key={p.id}>
                 <td>
-                  {p.first_name} {p.last_name}
+                  <Link to={`/sessions?patient_id=${p.id}`}>
+                    {p.first_name} {p.last_name}
+                  </Link>
                 </td>
                 <td>{p.phone ?? "—"}</td>
                 <td>{p.email ?? "—"}</td>

@@ -46,6 +46,7 @@ export function NavBar() {
           </Link>
           <div className="row">
             <Link to="/patients">Patients</Link>
+            <Link to="/sessions">Sessions</Link>
             {(user.role === "PROVIDER" || user.role === "SUPER_ADMIN") && (
               <Link to="/preferences">Preferences</Link>
             )}
