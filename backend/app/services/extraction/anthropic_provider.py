@@ -7,12 +7,20 @@ from pydantic import ValidationError
 from app.config import get_settings
 from app.models.preference import DoctorPreference
 from app.models.template import NoteTemplate
-from app.services.extraction.base import ClinicalExtractionProvider, ExtractionResult, TaggingResult
+from app.services.extraction.base import (
+    AskAIResult,
+    ClinicalExtractionProvider,
+    ExtractionResult,
+    TaggingResult,
+)
 from app.services.extraction.prompts import (
+    ASK_AI_SYSTEM_PROMPT,
+    ASK_AI_TOOLS,
     EXTRACTION_TOOL,
     SYSTEM_PROMPT,
     TAGGING_SYSTEM_PROMPT,
     TAGGING_TOOL,
+    build_ask_ai_user_prompt,
     build_tagging_user_prompt,
     build_user_prompt,
 )
@@ -101,3 +109,58 @@ class AnthropicExtractionProvider(ClinicalExtractionProvider):
                 continue
 
         raise RuntimeError(f"Transcript entity tagging failed after retries: {last_error}")
+
+    async def ask_ai(self, current_content: str, instruction: str) -> AskAIResult:
+        user_prompt = build_ask_ai_user_prompt(current_content, instruction)
+
+        last_error: Exception | None = None
+        for attempt in range(2):  # one retry if the model never finalizes
+            message = await self._client.messages.create(
+                model=settings.anthropic_model,
+                max_tokens=4096,
+                system=ASK_AI_SYSTEM_PROMPT,
+                tools=ASK_AI_TOOLS,
+                # "auto", not forced — Claude decides between record_revision,
+                # record_answer, and whether web_search is needed first.
+                tool_choice={"type": "auto"},
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+
+            revision = next(
+                (b for b in message.content if b.type == "tool_use" and b.name == "record_revision"),
+                None,
+            )
+            if revision is not None:
+                try:
+                    return AskAIResult(
+                        result_type="revision",
+                        revised_content=revision.input["revised_content"],
+                    )
+                except KeyError as exc:
+                    last_error = exc
+                    continue
+
+            answer = next(
+                (b for b in message.content if b.type == "tool_use" and b.name == "record_answer"),
+                None,
+            )
+            if answer is not None:
+                try:
+                    return AskAIResult(
+                        result_type="answer",
+                        answer=answer.input["answer"],
+                        sources=answer.input.get("sources", []),
+                    )
+                except KeyError as exc:
+                    last_error = exc
+                    continue
+
+            # Didn't call a finalize tool (only web_search, or nothing) —
+            # fall back to any plain text rather than fail outright.
+            text = next((b.text for b in message.content if b.type == "text"), None)
+            if text:
+                return AskAIResult(result_type="answer", answer=text)
+
+            last_error = RuntimeError("Model did not finalize with a tool call or text")
+
+        raise RuntimeError(f"Ask AI failed after retries: {last_error}")

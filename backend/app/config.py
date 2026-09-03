@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     whisper_model: str = "whisper-1"
     anthropic_model: str = "claude-sonnet-5"
 
+    # Outgoing email (sharing transcripts/notes) via Resend.
+    # console.resend.com — free tier, no domain required to start: leave
+    # resend_from_email unset and it falls back to Resend's shared
+    # onboarding@resend.dev sender (fine for testing; verify your own domain
+    # in Resend before relying on this for real patient communication).
+    resend_api_key: str | None = None
+    resend_from_email: str = "MedicDesk.ai <onboarding@resend.dev>"
+
     # Storage
     audio_storage_dir: str = "./data/audio"
     avatar_storage_dir: str = "./data/avatars"

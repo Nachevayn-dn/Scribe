@@ -9,7 +9,12 @@ from app.core.security import hash_password
 from app.database import get_db
 from app.deps import client_ip, get_current_user, require_role
 from app.models.user import ProviderAssistant, User, UserRole
-from app.schemas.user import UserCreateRequest, UserResponse, UserUpdateRequest
+from app.schemas.user import (
+    UserCreateRequest,
+    UserResponse,
+    UserSelfUpdateRequest,
+    UserUpdateRequest,
+)
 from app.services.audit_service import log_action
 from app.services.avatar_storage import save_avatar
 
@@ -60,6 +65,23 @@ async def my_assigned_providers(
         )
     )
     return list(result.scalars().all())
+
+
+@router.patch("/me", response_model=UserResponse)
+async def update_my_preferences(
+    payload: UserSelfUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """Self-service preferences any role may set on their own account —
+    theme and where their shared transcripts/notes should land. Not the
+    place for role/email/license changes; those stay SUPER_ADMIN-only via
+    PATCH /users/{user_id}."""
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(current_user, field, value)
+    await db.commit()
+    await db.refresh(current_user)
+    return current_user
 
 
 @router.post("/me/photo", response_model=UserResponse)

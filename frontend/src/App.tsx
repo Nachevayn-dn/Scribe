@@ -9,6 +9,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { EncounterRecordingPage } from "./pages/EncounterRecordingPage";
 import { ClinicAdminDashboard } from "./pages/ClinicAdminDashboard";
 import { PreferencesSettingsPage } from "./pages/PreferencesSettingsPage";
+import { IntegrationsPage } from "./pages/IntegrationsPage";
 
 function AppRoutes() {
   const { user } = useAuth();
@@ -48,6 +49,14 @@ function AppRoutes() {
             <RequireRole roles={["PROVIDER", "SUPER_ADMIN"]}>
               <PreferencesSettingsPage />
             </RequireRole>
+          }
+        />
+        <Route
+          path="/integrations"
+          element={
+            <RequireAuth>
+              <IntegrationsPage />
+            </RequireAuth>
           }
         />
         <Route

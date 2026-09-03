@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
+from app.core.exceptions import BadRequestError, ConflictError, ForbiddenError, NotFoundError
 from app.core.permissions import user_can_access_encounter, user_can_sign_note
 from app.database import get_db
 from app.deps import client_ip, get_current_user
@@ -16,12 +16,18 @@ from app.models.encounter import Encounter, EncounterStatus
 from app.models.transcript import Transcript
 from app.models.user import User
 from app.schemas.note import (
+    AskAIRequest,
+    AskAIResponse,
     ClinicalNoteResponse,
     NoteLineEditRequest,
+    ShareRequest,
+    ShareResponse,
     TranscriptLineEditRequest,
     TranscriptResponse,
 )
 from app.services.audit_service import log_action
+from app.services.email_service import EmailNotConfiguredError, send_share_email
+from app.services.extraction.anthropic_provider import AnthropicExtractionProvider
 from app.services.extraction_step import run_extraction
 from app.services.transcript_tagging import ensure_transcript_tagged
 
@@ -270,3 +276,112 @@ async def generate_note(
     )
     await db.commit()
     return await _get_note(db, encounter_id)
+
+
+@router.post("/{encounter_id}/share", response_model=ShareResponse)
+async def share_encounter_content(
+    encounter_id: uuid.UUID,
+    payload: ShareRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ShareResponse:
+    """Emails the transcript or note to whoever needs it — staff scheduling
+    a follow-up, or reflecting the visit into the EHR — not just the doctor
+    who recorded it. Sender identity is carried as Reply-To (see
+    services/email_service.py); recipients are whatever the doctor typed in,
+    plus their own notification email if they checked "send to me"."""
+    encounter = await _get_accessible_encounter(db, current_user, encounter_id)
+
+    recipients = list(dict.fromkeys(payload.recipients))  # de-dupe, keep order
+    if payload.include_self:
+        self_email = current_user.notification_email or current_user.email
+        if self_email not in recipients:
+            recipients.append(self_email)
+    if not recipients:
+        raise BadRequestError("Add at least one recipient, or check \"send to me\"")
+
+    patient = encounter.patient
+    patient_name = f"{patient.first_name} {patient.last_name}"
+    visit_date = encounter.started_at.date().isoformat()
+
+    if payload.content_type == "transcript":
+        transcript = await _get_latest_transcript(db, encounter_id)
+        body = transcript.raw_text
+        label = "Transcript"
+    else:
+        note = await _get_note(db, encounter_id)
+        body = note.rendered_content
+        label = "Clinical note"
+
+    subject = f"{label}: {patient_name} — {visit_date}"
+    body_text = (
+        f"{label} for {patient_name}'s visit on {visit_date}, "
+        f"shared by {current_user.full_name} via MedicDesk.ai.\n\n"
+        f"{body}"
+    )
+    reply_to = current_user.notification_email or current_user.email
+
+    try:
+        message_id = send_share_email(
+            to=recipients, subject=subject, body_text=body_text, reply_to=reply_to
+        )
+    except EmailNotConfiguredError as exc:
+        raise BadRequestError(str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    await log_action(
+        db,
+        clinic_id=current_user.clinic_id,
+        actor_user_id=current_user.id,
+        action="TRANSCRIPT_SHARED" if payload.content_type == "transcript" else "NOTE_SHARED",
+        resource_type="Encounter",
+        resource_id=str(encounter_id),
+        metadata={"recipients": recipients},
+        ip_address=client_ip(request),
+    )
+    await db.commit()
+    return ShareResponse(status="sent", message_id=message_id, recipients=recipients)
+
+
+@router.post("/{encounter_id}/note/ask-ai", response_model=AskAIResponse)
+async def ask_ai_about_note(
+    encounter_id: uuid.UUID,
+    payload: AskAIRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AskAIResponse:
+    """Free-form doctor instruction against the current note — Claude decides
+    whether it's a rework (returns revised text for the doctor to Apply or
+    discard) or a lookup (returns an answer with sources, informational
+    only — never applied automatically). Costs one Claude call per ask."""
+    await _get_accessible_encounter(db, current_user, encounter_id)
+    note = await _get_note(db, encounter_id)
+    if note.status == NoteStatus.SIGNED:
+        raise ConflictError("A signed note is immutable; create a new encounter for corrections")
+
+    try:
+        provider = AnthropicExtractionProvider()
+        result = await provider.ask_ai(note.rendered_content, payload.instruction)
+    except Exception as exc:  # noqa: BLE001 — surface a clean failure, not a 500
+        raise HTTPException(status_code=502, detail=f"Ask AI failed: {exc}") from exc
+
+    await log_action(
+        db,
+        clinic_id=current_user.clinic_id,
+        actor_user_id=current_user.id,
+        action="NOTE_ASK_AI",
+        resource_type="ClinicalNote",
+        resource_id=str(note.id),
+        metadata={"instruction": payload.instruction, "result_type": result.result_type},
+        ip_address=client_ip(request),
+    )
+    await db.commit()
+    return AskAIResponse(
+        result_type=result.result_type,
+        revised_content=result.revised_content,
+        answer=result.answer,
+        sources=[s.model_dump() for s in result.sources],
+    )

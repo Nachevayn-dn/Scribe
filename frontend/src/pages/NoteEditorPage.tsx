@@ -1,6 +1,8 @@
 import { useState } from "react";
 import * as notesApi from "../api/notes";
 import type { ClinicalNote } from "../types";
+import { ShareEmailModal } from "../components/encounters/ShareEmailModal";
+import { AskAIPanel } from "../components/notes/AskAIPanel";
 import { EntityLegend } from "../components/notes/EntityLegend";
 import { NoteLineEditor } from "../components/notes/NoteLineEditor";
 import { TemplateSelectorPanel } from "../components/notes/TemplateSelectorPanel";
@@ -18,6 +20,7 @@ export function NoteEditorPage({ encounterId, note, canEdit, canSign, onNoteChan
   const [error, setError] = useState<string | null>(null);
   const [signing, setSigning] = useState(false);
   const [switchingTemplate, setSwitchingTemplate] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   const lines = note.rendered_content.split("\n");
   const readOnly = !canEdit || note.status === "SIGNED";
@@ -45,6 +48,11 @@ export function NoteEditorPage({ encounterId, note, canEdit, canSign, onNoteChan
     }
   }
 
+  async function handleApplyRevision(revisedContent: string) {
+    const updated = await notesApi.replaceNoteContent(encounterId, revisedContent);
+    onNoteChange(updated);
+  }
+
   async function handleSign() {
     setSigning(true);
     setError(null);
@@ -61,17 +69,24 @@ export function NoteEditorPage({ encounterId, note, canEdit, canSign, onNoteChan
   return (
     <div className="card stack">
       <div className="row" style={{ justifyContent: "space-between" }}>
-        <strong>Clinical note</strong>
-        <span
-          className="badge"
-          style={
-            note.status === "SIGNED"
-              ? { background: "rgba(74, 222, 128, 0.16)", color: "#4ade80" }
-              : undefined
-          }
-        >
-          {note.status}
-        </span>
+        <div className="row">
+          <strong>Clinical note</strong>
+          <span
+            className="badge"
+            style={
+              note.status === "SIGNED"
+                ? { background: "rgba(74, 222, 128, 0.16)", color: "#4ade80" }
+                : undefined
+            }
+          >
+            {note.status}
+          </span>
+        </div>
+        {canEdit && (
+          <button className="btn" onClick={() => setSharing(true)}>
+            Share via email
+          </button>
+        )}
       </div>
 
       <EntityLegend />
@@ -105,6 +120,14 @@ export function NoteEditorPage({ encounterId, note, canEdit, canSign, onNoteChan
             {signing ? "Signing…" : "Sign note"}
           </button>
         </div>
+      )}
+
+      {canEdit && note.status !== "SIGNED" && (
+        <AskAIPanel encounterId={encounterId} onApply={handleApplyRevision} />
+      )}
+
+      {sharing && (
+        <ShareEmailModal encounterId={encounterId} contentType="note" onClose={() => setSharing(false)} />
       )}
     </div>
   );

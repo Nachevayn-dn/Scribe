@@ -5,6 +5,7 @@ an ordered list of lines, each optionally carrying zero or more tagged
 entities (medication/procedure/diagnostic/symptom/allergy spans).
 """
 from abc import ABC, abstractmethod
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -47,6 +48,22 @@ class TaggingResult(BaseModel):
     lines: list[TaggedLine] = Field(default_factory=list)
 
 
+class AskAISource(BaseModel):
+    title: str
+    url: str
+
+
+class AskAIResult(BaseModel):
+    """Either a full rework of the note (result_type "revision") or an
+    answer to a question / web lookup (result_type "answer") — never both.
+    See services/extraction/prompts.py's ASK_AI_* for how the model picks."""
+
+    result_type: Literal["revision", "answer"]
+    revised_content: str | None = None
+    answer: str | None = None
+    sources: list[AskAISource] = Field(default_factory=list)
+
+
 class ClinicalExtractionProvider(ABC):
     @abstractmethod
     async def extract(
@@ -61,4 +78,11 @@ class ClinicalExtractionProvider(ABC):
     async def tag_lines(self, lines: list[str]) -> TaggingResult:
         """Tags clinically relevant entity spans on an already-final list of
         transcript lines, without altering their wording."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def ask_ai(self, current_content: str, instruction: str) -> AskAIResult:
+        """Free-form doctor instruction against the current note — either a
+        rework ("make this shorter", "translate to French") or a lookup
+        ("what's the current dosing guidance for X") backed by web search."""
         raise NotImplementedError

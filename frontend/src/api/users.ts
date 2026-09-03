@@ -1,5 +1,5 @@
 import { api } from "./client";
-import type { User, UserRole } from "../types";
+import type { ThemePreference, User, UserRole } from "../types";
 
 export function listUsers() {
   return api.get<User[]>("/users");
@@ -21,6 +21,13 @@ export function createUser(payload: {
 
 export function updateUser(id: string, payload: Partial<Pick<User, "full_name" | "role" | "is_active" | "license_number">>) {
   return api.patch<User>(`/users/${id}`, payload);
+}
+
+export function updateMyPreferences(payload: {
+  theme_preference?: ThemePreference;
+  notification_email?: string;
+}) {
+  return api.patch<User>("/users/me", payload);
 }
 
 export function uploadMyPhoto(file: File) {

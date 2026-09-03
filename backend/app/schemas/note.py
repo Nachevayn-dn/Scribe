@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, Field
 
 from app.models.clinical_note import EntityType, NoteStatus
 
@@ -58,3 +59,33 @@ class NoteLineEditRequest(BaseModel):
 # Same shape, reused for editing a transcript line instead of a note line
 # (see PATCH /encounters/{id}/transcript).
 TranscriptLineEditRequest = NoteLineEditRequest
+
+
+class ShareRequest(BaseModel):
+    content_type: Literal["transcript", "note"]
+    recipients: list[EmailStr] = Field(default_factory=list)
+    # Also send a copy to the current user's own notification email
+    # (falling back to their login email if none is set).
+    include_self: bool = False
+
+
+class ShareResponse(BaseModel):
+    status: Literal["sent"]
+    message_id: str
+    recipients: list[str]
+
+
+class AskAIRequest(BaseModel):
+    instruction: str = Field(min_length=1, max_length=2000)
+
+
+class AskAISourceResponse(BaseModel):
+    title: str
+    url: str
+
+
+class AskAIResponse(BaseModel):
+    result_type: Literal["revision", "answer"]
+    revised_content: str | None = None
+    answer: str | None = None
+    sources: list[AskAISourceResponse] = Field(default_factory=list)

@@ -1,8 +1,11 @@
 import uuid
+from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field
 
 from app.models.user import UserRole
+
+ThemePreference = Literal["midnight", "jade"]
 
 
 class UserCreateRequest(BaseModel):
@@ -20,6 +23,14 @@ class UserUpdateRequest(BaseModel):
     license_number: str | None = None
 
 
+class UserSelfUpdateRequest(BaseModel):
+    """Fields a user may change about their own account, regardless of
+    role — distinct from UserUpdateRequest, which is SUPER_ADMIN-only."""
+
+    theme_preference: ThemePreference | None = None
+    notification_email: EmailStr | None = None
+
+
 class UserResponse(BaseModel):
     id: uuid.UUID
     clinic_id: uuid.UUID
@@ -29,5 +40,7 @@ class UserResponse(BaseModel):
     is_active: bool
     license_number: str | None
     photo_url: str | None
+    theme_preference: str
+    notification_email: str | None
 
     model_config = {"from_attributes": True}

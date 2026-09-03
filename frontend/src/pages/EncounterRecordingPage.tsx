@@ -6,6 +6,7 @@ import * as templatesApi from "../api/templates";
 import { useAuth } from "../auth/AuthContext";
 import { AudioRecorder } from "../components/audio/AudioRecorder";
 import { AudioUploadStatus } from "../components/audio/AudioUploadStatus";
+import { ShareEmailModal } from "../components/encounters/ShareEmailModal";
 import { EntityLegend } from "../components/notes/EntityLegend";
 import { TranscriptViewer } from "../components/notes/TranscriptViewer";
 import { ApiError } from "../api/client";
@@ -35,6 +36,7 @@ export function EncounterRecordingPage() {
   // yet (it's still "IN_PROGRESS"); relying on status alone would skip that
   // window and never start polling.
   const [awaitingPipeline, setAwaitingPipeline] = useState(false);
+  const [sharingTranscript, setSharingTranscript] = useState(false);
   const pollRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -145,7 +147,14 @@ export function EncounterRecordingPage() {
 
       {transcript && (
         <div className="card stack">
-          <strong>Transcript</strong>
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <strong>Transcript</strong>
+            {canEdit && (
+              <button className="btn" onClick={() => setSharingTranscript(true)}>
+                Share via email
+              </button>
+            )}
+          </div>
           <EntityLegend />
           <div style={{ maxHeight: 320, overflowY: "auto" }}>
             <TranscriptViewer
@@ -189,6 +198,14 @@ export function EncounterRecordingPage() {
           canEdit={canEdit}
           canSign={canSign}
           onNoteChange={setNote}
+        />
+      )}
+
+      {sharingTranscript && encounterId && (
+        <ShareEmailModal
+          encounterId={encounterId}
+          contentType="transcript"
+          onClose={() => setSharingTranscript(false)}
         />
       )}
     </div>

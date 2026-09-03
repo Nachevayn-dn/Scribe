@@ -118,6 +118,79 @@ TAGGING_TOOL = {
 }
 
 
+ASK_AI_SYSTEM_PROMPT = """You are helping a doctor with their clinical note, in one of two ways:
+
+1. REWORK — the doctor wants the note itself changed: made shorter or longer, \
+rephrased, translated, restructured, given specific detail added or removed. \
+Call record_revision with the complete revised note text (same line-based \
+format as the input — one clinical statement per line). Never invent clinical \
+facts that weren't already in the note or the doctor's instruction.
+
+2. LOOKUP — the doctor is asking a question or wants you to check something \
+external (current guidelines, a drug interaction, a coding reference, general \
+medical information). Use the web_search tool if it would help, then call \
+record_answer with a concise answer and the sources you used. Never edit the \
+note for a lookup — that's a separate, deliberate step the doctor takes \
+themselves if they want to incorporate what you found.
+
+Decide which of these two the doctor's instruction calls for, then call \
+exactly one of record_revision or record_answer to finish — always end by \
+calling one of them, never just plain text.
+"""
+
+
+def build_ask_ai_user_prompt(current_content: str, instruction: str) -> str:
+    return (
+        f"Current note:\n\"\"\"\n{current_content}\n\"\"\"\n\n"
+        f"Doctor's instruction: {instruction}"
+    )
+
+
+ASK_AI_TOOLS = [
+    {
+        "type": "web_search_20260209",
+        "name": "web_search",
+        "max_uses": 3,
+    },
+    {
+        "name": "record_revision",
+        "description": "Records a fully revised version of the clinical note.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "revised_content": {
+                    "type": "string",
+                    "description": "The complete revised note text, same line-based format as the original.",
+                }
+            },
+            "required": ["revised_content"],
+        },
+    },
+    {
+        "name": "record_answer",
+        "description": "Records a direct answer to the doctor's question or research request.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "answer": {"type": "string"},
+                "sources": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "title": {"type": "string"},
+                            "url": {"type": "string"},
+                        },
+                        "required": ["title", "url"],
+                    },
+                },
+            },
+            "required": ["answer"],
+        },
+    },
+]
+
+
 EXTRACTION_TOOL = {
     "name": "record_clinical_note",
     "description": "Records the structured, entity-tagged clinical note extracted from the transcript.",

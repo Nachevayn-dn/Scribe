@@ -1,7 +1,8 @@
 :root {
   /* MedicDesk.ai brand palette: black/near-black ground, dark-green
      surfaces, amber accent. Kept as CSS variables (not hardcoded) so any
-     future re-theme only touches this block. */
+     future re-theme only touches this block. This is "Midnight", the
+     default — see [data-theme="jade"] below for the alternate scheme. */
   --color-bg: #0a0f0c;
   --color-surface: #10201a;
   --color-surface-hover: #16281f;
@@ -11,10 +12,32 @@
   --color-primary: #e0a83a;
   --color-primary-hover: #c8941f;
   --color-primary-contrast: #1a1305;
+  --color-primary-soft: rgba(224, 168, 58, 0.16);
   --color-danger: #e5484d;
+  --color-danger-contrast: #1a0505;
   --radius: 8px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   color-scheme: dark;
+}
+
+/* "Jade & Candlelight" — warm beige ground, jade-green accent. A doctor
+   picks this (or Midnight) under Integrations; applied by setting
+   data-theme on <html> from their saved theme_preference — see
+   auth/AuthContext.tsx. Not tied to the OS light/dark setting. */
+:root[data-theme="jade"] {
+  --color-bg: #efe1c5;
+  --color-surface: #faf3e2;
+  --color-surface-hover: #f2e6cc;
+  --color-border: #ddc9a0;
+  --color-text: #2b2116;
+  --color-text-muted: #6b5c42;
+  --color-primary: #1f6f54;
+  --color-primary-hover: #17593f;
+  --color-primary-contrast: #f7f2e4;
+  --color-primary-soft: rgba(31, 111, 84, 0.14);
+  --color-danger: #b3261e;
+  --color-danger-contrast: #f7f2e4;
+  color-scheme: light;
 }
 
 * {
@@ -72,7 +95,7 @@ button {
 .btn-danger {
   background: var(--color-danger);
   border-color: var(--color-danger);
-  color: #1a0505;
+  color: var(--color-danger-contrast);
 }
 
 .card {
@@ -120,7 +143,7 @@ button {
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
-  background: rgba(224, 168, 58, 0.16);
+  background: var(--color-primary-soft);
   color: var(--color-primary);
 }
 

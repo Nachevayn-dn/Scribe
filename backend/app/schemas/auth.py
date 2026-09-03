@@ -30,5 +30,7 @@ class CurrentUserResponse(BaseModel):
     role: UserRole
     is_active: bool
     photo_url: str | None
+    theme_preference: str
+    notification_email: str | None
 
     model_config = {"from_attributes": True}

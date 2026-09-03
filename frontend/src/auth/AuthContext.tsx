@@ -70,6 +70,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  useEffect(() => {
+    // "midnight" is the default and has no attribute value of its own —
+    // only the alternate theme needs a data-theme flag (see global.css).
+    if (user?.theme_preference === "jade") {
+      document.documentElement.dataset.theme = "jade";
+    } else {
+      delete document.documentElement.dataset.theme;
+    }
+  }, [user?.theme_preference]);
+
   return (
     <AuthContext.Provider
       value={{ user, loading, login, signupClinic, logout, refreshUser: refreshMe }}

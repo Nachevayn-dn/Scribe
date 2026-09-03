@@ -57,6 +57,10 @@ end-to-end but the encounter cleanly ends in `FAILED` status with a clear
 error message — useful for exercising everything except the actual AI
 calls.
 
+`RESEND_API_KEY` is optional too — only needed for "Share via email"
+(Integrations page). Without it, sharing fails with a clear "add a Resend
+API key" message instead of a crash.
+
 ### Running without Docker
 
 ```bash

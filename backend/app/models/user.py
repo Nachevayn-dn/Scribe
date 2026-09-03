@@ -31,6 +31,14 @@ class User(UUIDPkMixin, TimestampMixin, SoftDeleteMixin, Base):
     # photo — served by the static mount in main.py. Null until the user
     # uploads one (see POST /users/me/photo).
     photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # UI color scheme, purely a per-viewer preference — "midnight" (dark,
+    # amber accent) or "jade" (warm beige, jade-green accent). See
+    # frontend/src/styles/global.css.
+    theme_preference: Mapped[str] = mapped_column(String(20), default="midnight", nullable=False)
+    # Where transcript/note shares should land for this doctor when they
+    # choose "send to me" — separate from their login email since it may be
+    # a personal inbox rather than the account they log in with.
+    notification_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     clinic: Mapped["Clinic"] = relationship(back_populates="users", lazy="selectin")  # noqa: F821
 

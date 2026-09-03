@@ -38,6 +38,8 @@ services:
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5}
       AUDIO_STORAGE_DIR: /app/data/audio
       AVATAR_STORAGE_DIR: /app/data/avatars
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-MedicDesk.ai <onboarding@resend.dev>}
     ports:
       - "8000:8000"
     volumes:

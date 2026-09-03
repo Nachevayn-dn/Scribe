@@ -1,4 +1,5 @@
 export type UserRole = "SUPER_ADMIN" | "PROVIDER" | "ASSISTANT";
+export type ThemePreference = "midnight" | "jade";
 
 export interface CurrentUser {
   id: string;
@@ -8,6 +9,8 @@ export interface CurrentUser {
   role: UserRole;
   is_active: boolean;
   photo_url: string | null;
+  theme_preference: ThemePreference;
+  notification_email: string | null;
 }
 
 export interface Clinic {
@@ -16,6 +19,8 @@ export interface Clinic {
   address: string | null;
   phone: string | null;
   is_active: boolean;
+  contact_email: string | null;
+  staff_email: string | null;
 }
 
 export interface User {
@@ -27,6 +32,8 @@ export interface User {
   is_active: boolean;
   license_number: string | null;
   photo_url: string | null;
+  theme_preference: ThemePreference;
+  notification_email: string | null;
 }
 
 export interface Patient {
@@ -127,6 +134,24 @@ export interface DoctorPreference {
   trigger_phrase: string;
   instruction: string;
   is_active: boolean;
+}
+
+export interface ShareResult {
+  status: "sent";
+  message_id: string;
+  recipients: string[];
+}
+
+export interface AskAISource {
+  title: string;
+  url: string;
+}
+
+export interface AskAIResult {
+  result_type: "revision" | "answer";
+  revised_content: string | null;
+  answer: string | null;
+  sources: AskAISource[];
 }
 
 export interface AuditLogEntry {

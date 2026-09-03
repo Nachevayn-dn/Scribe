@@ -2,6 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { DoctorAvatar } from "./DoctorAvatar";
 import { MedicDeskLogo } from "./MedicDeskLogo";
+import { ThemeSwitcher } from "./ThemeSwitcher";
 
 const ROLE_LABELS: Record<string, string> = {
   PROVIDER: "Doctor",
@@ -48,11 +49,13 @@ export function NavBar() {
             {(user.role === "PROVIDER" || user.role === "SUPER_ADMIN") && (
               <Link to="/preferences">Preferences</Link>
             )}
+            <Link to="/integrations">Integrations</Link>
             {user.role === "SUPER_ADMIN" && <Link to="/admin">Clinic Admin</Link>}
           </div>
         </div>
 
         <div className="row" style={{ gap: 12 }}>
+          <ThemeSwitcher />
           <DoctorAvatar />
           <div className="stack" style={{ gap: 2, minWidth: 0 }}>
             <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: "nowrap" }}>{user.full_name}</span>
