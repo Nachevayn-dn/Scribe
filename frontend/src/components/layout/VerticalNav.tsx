@@ -13,16 +13,30 @@ interface Props {
    * the first). Mirrors how both the platform console and the clinic
    * sidebar are specified: a few items, a line, a few more. */
   sections: NavItem[][];
-  /** Pinned to the bottom, opens the shared Help/Feedback modal. */
+  /** Appended as the very last item, after one more divider — opens the
+   * shared Help/Feedback modal. Styled identically to a nav link, not as
+   * a separate button, so the menu just quietly ends with it. */
   showFeedback?: boolean;
 }
 
-const linkStyle = ({ isActive }: { isActive: boolean }): React.CSSProperties => ({
+const itemStyle: React.CSSProperties = {
   display: "block",
+  width: "100%",
+  textAlign: "left",
   padding: "10px 16px",
   borderRadius: "var(--radius)",
+  border: "none",
+  background: "transparent",
   textDecoration: "none",
   fontSize: 14,
+  fontWeight: 500,
+  color: "var(--color-text)",
+  cursor: "pointer",
+  font: "inherit",
+};
+
+const linkStyle = ({ isActive }: { isActive: boolean }): React.CSSProperties => ({
+  ...itemStyle,
   fontWeight: isActive ? 600 : 500,
   color: isActive ? "var(--color-primary)" : "var(--color-text)",
   background: isActive ? "var(--color-primary-soft)" : "transparent",
@@ -37,7 +51,7 @@ function Divider() {
 /** The shared visual shape behind both left-hand menus in the app — the
  * platform admin console's sidebar and the doctor-facing clinic sidebar.
  * Each caller supplies its own title/sections; this owns only the layout,
- * active-link styling, and the Help/Feedback button. */
+ * active-link styling, and the trailing Help/Feedback item. */
 export function VerticalNav({ subtitle, sections, showFeedback }: Props) {
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
@@ -46,11 +60,8 @@ export function VerticalNav({ subtitle, sections, showFeedback }: Props) {
       style={{
         width: 220,
         flexShrink: 0,
-        borderRight: "1px solid var(--color-border)",
         background: "var(--color-surface)",
         padding: "20px 12px",
-        display: "flex",
-        flexDirection: "column",
         minHeight: "100vh",
       }}
     >
@@ -59,7 +70,7 @@ export function VerticalNav({ subtitle, sections, showFeedback }: Props) {
         <div style={{ fontSize: 11, color: "var(--color-text-muted)" }}>{subtitle}</div>
       </div>
 
-      <div className="stack" style={{ gap: 2, flex: 1 }}>
+      <div className="stack" style={{ gap: 2 }}>
         {sections.map((section, i) => (
           <div key={i} className="stack" style={{ gap: 2 }}>
             {i > 0 && <Divider />}
@@ -70,20 +81,18 @@ export function VerticalNav({ subtitle, sections, showFeedback }: Props) {
             ))}
           </div>
         ))}
+
+        {showFeedback && (
+          <>
+            <Divider />
+            <button style={itemStyle} onClick={() => setFeedbackOpen(true)}>
+              Help / Feedback
+            </button>
+          </>
+        )}
       </div>
 
-      {showFeedback && (
-        <>
-          <button
-            className="btn"
-            style={{ width: "100%", justifyContent: "center" }}
-            onClick={() => setFeedbackOpen(true)}
-          >
-            Help / Feedback
-          </button>
-          {feedbackOpen && <HelpFeedbackModal onClose={() => setFeedbackOpen(false)} />}
-        </>
-      )}
+      {feedbackOpen && <HelpFeedbackModal onClose={() => setFeedbackOpen(false)} />}
     </nav>
   );
 }

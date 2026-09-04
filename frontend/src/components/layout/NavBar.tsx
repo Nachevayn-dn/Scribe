@@ -1,6 +1,7 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { DoctorAvatar } from "./DoctorAvatar";
+import { LogoutLink } from "./LogoutLink";
 import { MedicDeskLogo } from "./MedicDeskLogo";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 
@@ -11,20 +12,13 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 export function NavBar() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
 
   if (!user) return null;
-
-  function handleLogout() {
-    logout();
-    navigate("/login");
-  }
 
   return (
     <header
       style={{
-        borderBottom: "1px solid var(--color-border)",
         background: "var(--color-surface)",
       }}
     >
@@ -66,9 +60,7 @@ export function NavBar() {
               {ROLE_LABELS[user.role] ?? user.role}
             </span>
           </div>
-          <button className="btn" onClick={handleLogout}>
-            Log out
-          </button>
+          <LogoutLink />
         </div>
       </div>
     </header>

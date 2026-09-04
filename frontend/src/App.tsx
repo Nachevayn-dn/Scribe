@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { RequireAuth, RequirePlatformAdmin, RequireRole } from "./auth/RequireRole";
 import { AppLayout } from "./components/layout/AppLayout";
+import { Footer } from "./components/layout/Footer";
 import { NavBar } from "./components/layout/NavBar";
 import { ComingSoonPage } from "./components/common/ComingSoonPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -152,6 +153,7 @@ function AppRoutes() {
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <Footer />
     </>
   );
 }
