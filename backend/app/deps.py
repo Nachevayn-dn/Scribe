@@ -47,9 +47,11 @@ def require_role(*roles: UserRole):
 
 async def require_platform_admin(current_user: User = Depends(get_current_user)) -> User:
     """Gates the platform console (see api/platform.py) — a MedicDesk
-    operator account, not a clinic's own SUPER_ADMIN. Checks both the role
-    and the flag, defense in depth, same shape as require_role."""
-    if current_user.role != UserRole.SUPER_ADMIN or not current_user.is_platform_admin:
+    operator account, not a clinic's own SUPER_ADMIN. Only the flag matters:
+    there's no self-serve way to set it (see scripts/grant_platform_admin.py),
+    so it's already a deliberate, out-of-band grant regardless of the
+    account's ordinary clinic role (PROVIDER/ASSISTANT/SUPER_ADMIN)."""
+    if not current_user.is_platform_admin:
         raise ForbiddenError("Requires platform admin access")
     return current_user
 
