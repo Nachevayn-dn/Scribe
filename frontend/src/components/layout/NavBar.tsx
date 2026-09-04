@@ -47,11 +47,13 @@ export function NavBar() {
           <div className="row">
             <Link to="/patients">Patients</Link>
             <Link to="/sessions">Sessions</Link>
+            <Link to="/appointments">Appointments</Link>
             {(user.role === "PROVIDER" || user.role === "SUPER_ADMIN") && (
               <Link to="/preferences">Preferences</Link>
             )}
             <Link to="/integrations">Integrations</Link>
             {user.role === "SUPER_ADMIN" && <Link to="/admin">Clinic Admin</Link>}
+            {user.is_platform_admin && <Link to="/platform">Platform</Link>}
           </div>
         </div>
 

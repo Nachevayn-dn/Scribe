@@ -41,6 +41,9 @@ async def authenticate_user(db: AsyncSession, *, email: str, password: str) -> U
     user = result.scalar_one_or_none()
     if user is None or user.deleted_at is not None or not user.is_active:
         raise UnauthorizedError("Invalid email or password")
-    if not verify_password(password, user.hashed_password):
+    # A pre-provisioned account (created by a platform admin, credentials
+    # not generated yet) has no password hash at all — never attempt to
+    # verify against it, that's not "no password required."
+    if user.hashed_password is None or not verify_password(password, user.hashed_password):
         raise UnauthorizedError("Invalid email or password")
     return user

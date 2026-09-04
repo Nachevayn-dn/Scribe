@@ -4,6 +4,7 @@ import * as encountersApi from "../api/encounters";
 import * as patientsApi from "../api/patients";
 import * as usersApi from "../api/users";
 import { ApiError } from "../api/client";
+import { googleCalendarQuickAddUrl } from "../utils/googleCalendar";
 import type { Encounter, Patient, User } from "../types";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -17,25 +18,15 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-const DEFAULT_APPOINTMENT_MINUTES = 30;
 
-/** A "quick-add" Google Calendar link — no OAuth, no API key. It opens
- * Google Calendar pre-filled; the doctor still clicks Save there. Real
- * automatic sync needs a Google Cloud OAuth app (see Integrations), which
- * hasn't been set up yet — this is the no-setup middle ground. Returns null
- * when there's no appointment_time to anchor the event to. */
+/** Returns null when there's no appointment_time to anchor the event to. */
 function googleCalendarUrl(encounter: Encounter, patientName: string, providerName: string): string | null {
   if (!encounter.appointment_time) return null;
-  const start = new Date(encounter.appointment_time);
-  const end = new Date(start.getTime() + DEFAULT_APPOINTMENT_MINUTES * 60 * 1000);
-  const fmt = (d: Date) => d.toISOString().replace(/[-:]|\.\d{3}/g, "");
-  const params = new URLSearchParams({
-    action: "TEMPLATE",
-    text: `Scribe session — ${patientName}`,
-    dates: `${fmt(start)}/${fmt(end)}`,
+  return googleCalendarQuickAddUrl({
+    title: `Scribe session — ${patientName}`,
+    start: new Date(encounter.appointment_time),
     details: `MedicDesk.ai Scribe session with ${providerName}.`,
   });
-  return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
 /** All Scribe sessions the current user can see (role-scoped server-side,

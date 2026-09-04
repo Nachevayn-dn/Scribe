@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import * as dashboardApi from "../api/dashboard";
 import * as patientsApi from "../api/patients";
 import * as usersApi from "../api/users";
+import { FirstLoginLanguageModal } from "../components/common/FirstLoginLanguageModal";
 import { DateTimeWidget } from "../components/dashboard/DateTimeWidget";
 import { StatWidget } from "../components/dashboard/StatWidget";
 import { StartScribeSessionModal } from "../components/encounters/StartScribeSessionModal";
@@ -45,6 +46,7 @@ export function DashboardPage() {
 
   return (
     <div className="page stack">
+      <FirstLoginLanguageModal />
       {error && <div className="error-text">{error}</div>}
 
       <div className="row" style={{ flexWrap: "wrap", alignItems: "stretch" }}>
@@ -57,9 +59,9 @@ export function DashboardPage() {
         />
         <StatWidget
           label="Scheduled appointments"
-          value={summary?.scheduled_appointment_sessions_this_week ?? 0}
-          hint="Sessions marked as scheduled, last 7 days"
-          to="/sessions?range=week&scheduled=true"
+          value={summary?.upcoming_appointments ?? 0}
+          hint="Upcoming, next 7 days"
+          to="/appointments?range=week"
         />
       </div>
 

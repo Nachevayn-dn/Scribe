@@ -1,6 +1,7 @@
 import { useState } from "react";
 import * as notesApi from "../api/notes";
 import type { ClinicalNote } from "../types";
+import { ScheduleFollowUpModal } from "../components/encounters/ScheduleFollowUpModal";
 import { ShareEmailModal } from "../components/encounters/ShareEmailModal";
 import { AskAIPanel } from "../components/notes/AskAIPanel";
 import { EntityLegend } from "../components/notes/EntityLegend";
@@ -10,17 +11,32 @@ import { ApiError } from "../api/client";
 
 interface Props {
   encounterId: string;
+  patientId: string;
+  providerId: string;
+  patientName: string;
+  providerName: string;
   note: ClinicalNote;
   canEdit: boolean;
   canSign: boolean;
   onNoteChange: (note: ClinicalNote) => void;
 }
 
-export function NoteEditorPage({ encounterId, note, canEdit, canSign, onNoteChange }: Props) {
+export function NoteEditorPage({
+  encounterId,
+  patientId,
+  providerId,
+  patientName,
+  providerName,
+  note,
+  canEdit,
+  canSign,
+  onNoteChange,
+}: Props) {
   const [error, setError] = useState<string | null>(null);
   const [signing, setSigning] = useState(false);
   const [switchingTemplate, setSwitchingTemplate] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
 
   const lines = note.rendered_content.split("\n");
   const readOnly = !canEdit || note.status === "SIGNED";
@@ -83,9 +99,14 @@ export function NoteEditorPage({ encounterId, note, canEdit, canSign, onNoteChan
           </span>
         </div>
         {canEdit && (
-          <button className="btn" onClick={() => setSharing(true)}>
-            Share via email
-          </button>
+          <div className="row">
+            <button className="btn" onClick={() => setScheduling(true)}>
+              Schedule follow-up
+            </button>
+            <button className="btn" onClick={() => setSharing(true)}>
+              Share via email
+            </button>
+          </div>
         )}
       </div>
 
@@ -128,6 +149,17 @@ export function NoteEditorPage({ encounterId, note, canEdit, canSign, onNoteChan
 
       {sharing && (
         <ShareEmailModal encounterId={encounterId} contentType="note" onClose={() => setSharing(false)} />
+      )}
+
+      {scheduling && (
+        <ScheduleFollowUpModal
+          patientId={patientId}
+          providerId={providerId}
+          patientName={patientName}
+          providerName={providerName}
+          sourceEncounterId={encounterId}
+          onClose={() => setScheduling(false)}
+        />
       )}
     </div>
   );

@@ -11,6 +11,8 @@ export interface CurrentUser {
   photo_url: string | null;
   theme_preference: ThemePreference;
   notification_email: string | null;
+  language_preference: string | null;
+  is_platform_admin: boolean;
 }
 
 export interface Clinic {
@@ -34,6 +36,29 @@ export interface User {
   photo_url: string | null;
   theme_preference: ThemePreference;
   notification_email: string | null;
+  language_preference: string | null;
+  is_platform_admin: boolean;
+  // Null means credentials haven't been generated for this account yet.
+  password_set_at: string | null;
+}
+
+export type ClinicDocumentType = "CONTRACT" | "ORDER_FORM" | "CONSENT_FORM";
+
+export interface ClinicDocument {
+  id: string;
+  clinic_id: string;
+  doc_type: ClinicDocumentType;
+  original_filename: string;
+  mime_type: string;
+  uploaded_by_id: string;
+  created_at: string;
+}
+
+export interface PlatformAnalytics {
+  clinics_count: number;
+  active_doctors_count: number;
+  sessions_this_week: number;
+  notes_signed_this_week: number;
 }
 
 export interface Patient {
@@ -76,6 +101,23 @@ export interface Encounter {
 export interface DashboardSummary {
   sessions_this_week: number;
   scheduled_appointment_sessions_this_week: number;
+  upcoming_appointments: number;
+}
+
+export type AppointmentStatus = "SCHEDULED" | "CANCELLED";
+
+export interface Appointment {
+  id: string;
+  clinic_id: string;
+  patient_id: string;
+  provider_id: string;
+  created_by_id: string;
+  // The session this follow-up was scheduled from, if any.
+  source_encounter_id: string | null;
+  scheduled_time: string;
+  reason: string | null;
+  status: AppointmentStatus;
+  created_at: string;
 }
 
 export type EntityType = "MEDICATION" | "PROCEDURE" | "DIAGNOSTIC" | "SYMPTOM" | "ALLERGY";

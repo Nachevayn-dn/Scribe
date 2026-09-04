@@ -10,6 +10,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.appointment import Appointment
 from app.models.encounter import Encounter
 from app.models.user import ProviderAssistant, User, UserRole
 
@@ -44,6 +45,17 @@ async def user_can_start_encounter_for_provider(
         return user.role == UserRole.SUPER_ADMIN or user.id == provider_id
     if user.role == UserRole.ASSISTANT:
         return await assistant_can_access_provider(db, user.id, provider_id)
+    return False
+
+
+async def user_can_access_appointment(db: AsyncSession, user: User, appointment: Appointment) -> bool:
+    """Same shape as user_can_access_encounter — read/reschedule/cancel access."""
+    if user.role == UserRole.SUPER_ADMIN:
+        return user.clinic_id == appointment.clinic_id
+    if user.role == UserRole.PROVIDER:
+        return user.id == appointment.provider_id
+    if user.role == UserRole.ASSISTANT:
+        return await assistant_can_access_provider(db, user.id, appointment.provider_id)
     return False
 
 

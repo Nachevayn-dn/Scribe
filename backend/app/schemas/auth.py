@@ -32,5 +32,7 @@ class CurrentUserResponse(BaseModel):
     photo_url: str | None
     theme_preference: str
     notification_email: str | None
+    language_preference: str | None
+    is_platform_admin: bool
 
     model_config = {"from_attributes": True}

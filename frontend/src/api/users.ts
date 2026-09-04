@@ -26,6 +26,7 @@ export function updateUser(id: string, payload: Partial<Pick<User, "full_name" |
 export function updateMyPreferences(payload: {
   theme_preference?: ThemePreference;
   notification_email?: string;
+  language_preference?: string;
 }) {
   return api.patch<User>("/users/me", payload);
 }

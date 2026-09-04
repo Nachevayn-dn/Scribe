@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     # Storage
     audio_storage_dir: str = "./data/audio"
     avatar_storage_dir: str = "./data/avatars"
+    # Clinic contracts/order forms/consent forms — private, never served
+    # from a public URL (see services/document_storage.py).
+    document_storage_dir: str = "./data/documents"
 
 
 @lru_cache

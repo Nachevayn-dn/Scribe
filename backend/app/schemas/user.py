@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field
@@ -29,6 +30,9 @@ class UserSelfUpdateRequest(BaseModel):
 
     theme_preference: ThemePreference | None = None
     notification_email: EmailStr | None = None
+    # ISO-639-1 code — the doctor's default language, picked once on first
+    # login after a platform admin generates their credentials.
+    language_preference: str | None = None
 
 
 class UserResponse(BaseModel):
@@ -42,5 +46,10 @@ class UserResponse(BaseModel):
     photo_url: str | None
     theme_preference: str
     notification_email: str | None
+    language_preference: str | None
+    is_platform_admin: bool
+    # Null means credentials haven't been generated yet — see
+    # POST /platform/users/{id}/generate-credentials.
+    password_set_at: datetime | None
 
     model_config = {"from_attributes": True}

@@ -45,6 +45,15 @@ def require_role(*roles: UserRole):
     return _dependency
 
 
+async def require_platform_admin(current_user: User = Depends(get_current_user)) -> User:
+    """Gates the platform console (see api/platform.py) — a MedicDesk
+    operator account, not a clinic's own SUPER_ADMIN. Checks both the role
+    and the flag, defense in depth, same shape as require_role."""
+    if current_user.role != UserRole.SUPER_ADMIN or not current_user.is_platform_admin:
+        raise ForbiddenError("Requires platform admin access")
+    return current_user
+
+
 def client_ip(request: Request) -> str | None:
     if request.client:
         return request.client.host

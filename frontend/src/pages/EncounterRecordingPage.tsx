@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import * as encountersApi from "../api/encounters";
 import * as notesApi from "../api/notes";
+import * as patientsApi from "../api/patients";
 import * as templatesApi from "../api/templates";
+import * as usersApi from "../api/users";
 import { useAuth } from "../auth/AuthContext";
 import { AudioRecorder } from "../components/audio/AudioRecorder";
 import { AudioUploadStatus } from "../components/audio/AudioUploadStatus";
@@ -10,7 +12,7 @@ import { ShareEmailModal } from "../components/encounters/ShareEmailModal";
 import { EntityLegend } from "../components/notes/EntityLegend";
 import { TranscriptViewer } from "../components/notes/TranscriptViewer";
 import { ApiError } from "../api/client";
-import type { ClinicalNote, Encounter, EncounterStatus, NoteTemplate, Transcript } from "../types";
+import type { ClinicalNote, Encounter, EncounterStatus, NoteTemplate, Patient, Transcript, User } from "../types";
 import { NoteEditorPage } from "./NoteEditorPage";
 
 const POLL_INTERVAL_MS = 3000;
@@ -26,6 +28,8 @@ export function EncounterRecordingPage() {
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [note, setNote] = useState<ClinicalNote | null>(null);
   const [templates, setTemplates] = useState<NoteTemplate[]>([]);
+  const [patient, setPatient] = useState<Patient | null>(null);
+  const [providers, setProviders] = useState<User[]>([]);
   const [uploading, setUploading] = useState(false);
   const [generating, setGenerating] = useState<string | null>(null); // template_id being generated
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +45,15 @@ export function EncounterRecordingPage() {
 
   useEffect(() => {
     templatesApi.listTemplates().then(setTemplates).catch(() => setTemplates([]));
+    usersApi.myAssignedProviders().then(setProviders).catch(() => setProviders([]));
   }, []);
+
+  // Patient/provider display names for the "Schedule follow-up" modal —
+  // fetched once we know which patient this encounter is for.
+  useEffect(() => {
+    if (!encounter?.patient_id) return;
+    patientsApi.getPatient(encounter.patient_id).then(setPatient).catch(() => setPatient(null));
+  }, [encounter?.patient_id]);
 
   const loadEncounter = useCallback(async () => {
     if (!encounterId) return;
@@ -194,6 +206,12 @@ export function EncounterRecordingPage() {
       {note && (
         <NoteEditorPage
           encounterId={encounter.id}
+          patientId={encounter.patient_id}
+          providerId={encounter.provider_id}
+          patientName={patient ? `${patient.first_name} ${patient.last_name}` : "this patient"}
+          providerName={
+            providers.find((p) => p.id === encounter.provider_id)?.full_name ?? "your doctor"
+          }
           note={note}
           canEdit={canEdit}
           canSign={canSign}
