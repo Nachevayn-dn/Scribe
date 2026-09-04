@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Modal } from "../../components/common/Modal";
+import { Modal } from "./Modal";
 
 const SUPPORT_EMAIL = "support@medicdesk.ai";
 
 /** Opens the viewer's own mail client with a pre-filled message — no backend
- * needed, works everywhere, and doesn't depend on Resend being configured. */
+ * needed, works everywhere, and doesn't depend on Resend being configured.
+ * Shared by both the platform admin console and the doctor-facing sidebar. */
 export function HelpFeedbackModal({ onClose }: { onClose: () => void }) {
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");

@@ -5,7 +5,8 @@ interface Props {
 
 /** A truthful placeholder — Inbound/Outbound agents aren't built yet (see
  * the project plan: Scribe ships first). Better than a fake or hidden nav
- * item. */
+ * item. Shared by both the platform admin console and the doctor-facing
+ * sidebar. */
 export function ComingSoonPage({ title, description }: Props) {
   return (
     <div className="stack">

@@ -31,7 +31,18 @@ export function PlatformLayout() {
             ← Exit to app
           </Link>
           <span style={{ fontSize: 13, color: "var(--color-text-muted)" }}>{user?.full_name}</span>
-          <button className="btn" onClick={handleLogout}>
+          <button
+            onClick={handleLogout}
+            style={{
+              background: "none",
+              border: "none",
+              padding: 0,
+              font: "inherit",
+              fontSize: 13,
+              color: "var(--color-primary)",
+              cursor: "pointer",
+            }}
+          >
             Log out
           </button>
         </header>
