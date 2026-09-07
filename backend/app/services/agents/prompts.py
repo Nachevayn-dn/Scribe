@@ -8,90 +8,115 @@ from app.models.agent_knowledge_document import AgentKnowledgeDocument
 from app.models.inbound_agent_config import InboundAgentConfig
 from app.models.preference import DoctorPreference
 
-INBOUND_AGENT_TOOLS = [
-    {
-        "name": "say_and_continue",
-        "description": (
-            "Say something to the caller and keep listening for their reply. Use this for "
-            "anything short of a final outcome — asking a question, giving information, "
-            "acknowledging what they said. Ask only one question at a time; this is a phone "
-            "call, not a form."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {"text": {"type": "string"}},
-            "required": ["text"],
-        },
-    },
-    {
-        "name": "propose_appointment",
-        "description": (
-            "Ends the call after proposing a specific appointment to the doctor for approval. "
-            "Only call this once you have the caller's name, what the visit is for, a specific "
-            "proposed date/time, and how they'd like to be contacted about it."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "closing_text": {"type": "string", "description": "What to say before hanging up."},
-                "patient_full_name": {
-                    "type": "string",
-                    "description": "The caller's name as confirmed with them (read back and, if unusual, spelled out) — not just what speech recognition first heard.",
-                },
-                "date_of_birth": {
-                    "type": "string",
-                    "description": "The caller's date of birth, ISO 8601 (YYYY-MM-DD) — ask for it before proposing.",
-                },
-                "reason": {
-                    "type": "string",
-                    "description": "What the visit is for, e.g. 'dental implant consultation'.",
-                },
-                "proposed_time": {
-                    "type": "string",
-                    "description": "ISO 8601 datetime for the proposed slot, in the clinic's local time.",
-                },
-                "contact_channel": {"type": "string", "enum": ["EMAIL", "SMS", "WHATSAPP"]},
-                "contact_value": {
-                    "type": "string",
-                    "description": "The caller's email address or phone number for that channel.",
-                },
+
+def _base_inbound_agent_tools() -> list[dict]:
+    return [
+        {
+            "name": "say_and_continue",
+            "description": (
+                "Say something to the caller and keep listening for their reply. Use this for "
+                "anything short of a final outcome — asking a question, giving information, "
+                "acknowledging what they said. Ask only one question at a time; this is a phone "
+                "call, not a form."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {"text": {"type": "string"}},
+                "required": ["text"],
             },
-            "required": [
-                "closing_text",
-                "patient_full_name",
-                "date_of_birth",
-                "reason",
-                "proposed_time",
-                "contact_channel",
-                "contact_value",
-            ],
         },
-    },
-    {
-        "name": "escalate_emergency",
+        {
+            "name": "propose_appointment",
+            "description": (
+                "Ends the call after proposing a specific appointment to the doctor for approval. "
+                "Only call this once you have the caller's name, what the visit is for, a specific "
+                "proposed date/time, and how they'd like to be contacted about it."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "closing_text": {"type": "string", "description": "What to say before hanging up."},
+                    "patient_full_name": {
+                        "type": "string",
+                        "description": "The caller's name as confirmed with them (read back and, if unusual, spelled out) — not just what speech recognition first heard.",
+                    },
+                    "date_of_birth": {
+                        "type": "string",
+                        "description": "The caller's date of birth, ISO 8601 (YYYY-MM-DD) — ask for it before proposing.",
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "What the visit is for, e.g. 'dental implant consultation'.",
+                    },
+                    "proposed_time": {
+                        "type": "string",
+                        "description": "ISO 8601 datetime for the proposed slot, in the clinic's local time.",
+                    },
+                    "contact_channel": {"type": "string", "enum": ["EMAIL", "SMS", "WHATSAPP"]},
+                    "contact_value": {
+                        "type": "string",
+                        "description": "The caller's email address or phone number for that channel.",
+                    },
+                },
+                "required": [
+                    "closing_text",
+                    "patient_full_name",
+                    "date_of_birth",
+                    "reason",
+                    "proposed_time",
+                    "contact_channel",
+                    "contact_value",
+                ],
+            },
+        },
+        {
+            "name": "escalate_emergency",
+            "description": (
+                "Ends the call immediately because this may be a medical emergency. Follow any "
+                "emergency-handling rule you were given below."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {"closing_text": {"type": "string"}},
+                "required": ["closing_text"],
+            },
+        },
+        {
+            "name": "end_call",
+            "description": (
+                "Ends the call for any other reason — the caller's question was fully answered, "
+                "they don't need an appointment, or they're done talking."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {"closing_text": {"type": "string"}},
+                "required": ["closing_text"],
+            },
+        },
+    ]
+
+
+def build_inbound_agent_tools(config: InboundAgentConfig) -> list[dict]:
+    """Every tool gets a `detected_language` property, restricted to this
+    clinic's actual supported languages — used to switch Twilio's speech
+    recognition/voice mid-call to match what the caller is actually
+    speaking (see api/telephony.py's voice_gather), without them having to
+    ask for it."""
+    supported = [config.default_language] + [
+        code for code in config.additional_languages if code != config.default_language
+    ]
+    language_property = {
+        "type": "string",
+        "enum": supported,
         "description": (
-            "Ends the call immediately because this may be a medical emergency. Follow any "
-            "emergency-handling rule you were given below."
+            "Set this to whichever supported language the caller is currently speaking, if it's "
+            "different from the language your last turn was in. Omit if unchanged."
         ),
-        "input_schema": {
-            "type": "object",
-            "properties": {"closing_text": {"type": "string"}},
-            "required": ["closing_text"],
-        },
-    },
-    {
-        "name": "end_call",
-        "description": (
-            "Ends the call for any other reason — the caller's question was fully answered, "
-            "they don't need an appointment, or they're done talking."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {"closing_text": {"type": "string"}},
-            "required": ["closing_text"],
-        },
-    },
-]
+    }
+    tools = _base_inbound_agent_tools()
+    for tool in tools:
+        tool["input_schema"]["properties"]["detected_language"] = language_property
+    return tools
 
 
 def build_inbound_system_prompt(
@@ -101,6 +126,9 @@ def build_inbound_system_prompt(
     preferences: list[DoctorPreference],
 ) -> str:
     now = datetime.now().strftime("%A, %Y-%m-%d %H:%M")
+    supported = [config.default_language] + [
+        code for code in config.additional_languages if code != config.default_language
+    ]
     parts = [
         "You are the phone receptionist for a medical/dental clinic, answering a live call. "
         "Your objective is to help the caller and, where appropriate, bring them to a booked "
@@ -115,9 +143,14 @@ def build_inbound_system_prompt(
         "sounds unusual, ask them to spell it out letter by letter. Never finalize an "
         "appointment with a name you haven't confirmed this way.",
         f"Current date/time: {now}.",
-        f"Speak in: {config.default_language}"
-        + (f" (also fluent in: {', '.join(config.additional_languages)})" if config.additional_languages else "")
-        + " — switch language if the caller does.",
+        f"You can converse in: {', '.join(supported)}. The greeting was spoken in "
+        f"{config.default_language} since there was nothing yet to judge the caller's language "
+        "from, but starting from their very first reply, actually listen to what language they "
+        "are speaking and switch to match — automatically, without them having to ask. Set "
+        "detected_language on every tool call to reflect this (see that tool parameter's own "
+        "description). If the caller speaks a language not in the list above, apologize in "
+        f"{config.default_language} that you can't support it yet and continue in a language "
+        "you do support.",
     ]
 
     if decision_rules:

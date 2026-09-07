@@ -208,6 +208,51 @@ async def test_gather_continue_keeps_listening(client: AsyncClient):
         assert call.outcome == CallOutcome.IN_PROGRESS
 
 
+async def test_gather_switches_locale_when_caller_speaks_another_language(client: AsyncClient):
+    setup = await _setup_clinic_with_provider(client)
+    await _enable_config(setup["clinic_id"], additional_languages=["es"])  # default stays "en"
+
+    with _patch_signature_ok():
+        incoming = await client.post(
+            VOICE_URL.format(clinic_id=setup["clinic_id"]),
+            data={"CallSid": "CA-lang-switch", "From": "+15550001111"},
+        )
+    assert 'language="en-US"' in incoming.text  # greeting still in the clinic default
+
+    turn_result = InboundAgentTurnResult(
+        action="continue", say_text="¿En qué puedo ayudarle?", detected_language="es"
+    )
+    with _patch_signature_ok(), patch(
+        "app.api.telephony.inbound_agent.next_turn", new=AsyncMock(return_value=turn_result)
+    ):
+        resp = await client.post(
+            GATHER_URL.format(clinic_id=setup["clinic_id"]),
+            data={"CallSid": "CA-lang-switch", "SpeechResult": "Hola, necesito una cita"},
+        )
+    assert resp.status_code == 200
+    assert 'language="es-ES"' in resp.text
+
+    async with TestSessionLocal() as session:
+        result = await session.execute(
+            select(InboundCallSession).where(InboundCallSession.twilio_call_sid == "CA-lang-switch")
+        )
+        call = result.scalar_one()
+        assert call.language_used == "es"
+
+    # A follow-up turn back in English should switch the locale back too.
+    turn_result_en = InboundAgentTurnResult(
+        action="continue", say_text="Sure, what's the date of birth?", detected_language="en"
+    )
+    with _patch_signature_ok(), patch(
+        "app.api.telephony.inbound_agent.next_turn", new=AsyncMock(return_value=turn_result_en)
+    ):
+        resp2 = await client.post(
+            GATHER_URL.format(clinic_id=setup["clinic_id"]),
+            data={"CallSid": "CA-lang-switch", "SpeechResult": "Actually let's continue in English"},
+        )
+    assert 'language="en-US"' in resp2.text
+
+
 async def test_gather_propose_appointment_creates_patient_and_appointment(client: AsyncClient):
     setup = await _setup_clinic_with_provider(client)
     await _enable_config(setup["clinic_id"])

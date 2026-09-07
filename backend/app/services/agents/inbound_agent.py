@@ -14,7 +14,7 @@ from app.models.inbound_agent_config import InboundAgentConfig
 from app.models.preference import DoctorPreference
 from app.services.agents.base import InboundAgentTurnResult
 from app.services.agents.prompts import (
-    INBOUND_AGENT_TOOLS,
+    build_inbound_agent_tools,
     build_inbound_system_prompt,
     build_inbound_user_prompt,
 )
@@ -54,6 +54,7 @@ async def next_turn(
     client = _client()
     system_prompt = build_inbound_system_prompt(config, knowledge_documents, decision_rules, preferences)
     user_prompt = build_inbound_user_prompt(transcript_so_far, latest_caller_utterance)
+    tools = build_inbound_agent_tools(config)
 
     last_error: Exception | None = None
     for attempt in range(2):  # one retry on a parse/validation failure
@@ -61,7 +62,7 @@ async def next_turn(
             model=settings.anthropic_model,
             max_tokens=1024,
             system=system_prompt,
-            tools=INBOUND_AGENT_TOOLS,
+            tools=tools,
             tool_choice={"type": "auto"},
             messages=[{"role": "user", "content": user_prompt}],
         )
@@ -74,7 +75,11 @@ async def next_turn(
 
         try:
             if tool_use.name == "say_and_continue":
-                return InboundAgentTurnResult(action="continue", say_text=tool_use.input["text"])
+                return InboundAgentTurnResult(
+                    action="continue",
+                    say_text=tool_use.input["text"],
+                    detected_language=tool_use.input.get("detected_language"),
+                )
             if tool_use.name in _TERMINAL_TOOLS:
                 data = dict(tool_use.input)
                 say_text = data.pop("closing_text")

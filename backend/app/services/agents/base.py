@@ -14,6 +14,12 @@ class InboundAgentTurnResult(BaseModel):
     action: Literal["continue", "propose_appointment", "escalate_emergency", "end_call"]
     say_text: str
 
+    # Set whenever the agent detects the caller is speaking a different
+    # (clinic-supported) language than the current turn was in — lets
+    # api/telephony.py switch Twilio's speech-recognition/voice locale to
+    # match on the very next turn, without the caller having to ask.
+    detected_language: str | None = None
+
     # Only populated when action == "propose_appointment".
     patient_full_name: str | None = None
     date_of_birth: str | None = None  # ISO 8601 (YYYY-MM-DD)

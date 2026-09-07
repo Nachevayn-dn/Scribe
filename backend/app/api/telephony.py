@@ -173,7 +173,8 @@ async def voice_incoming(
     from_number = params.get("From", "")
     provider_id = await _pick_default_provider(db, clinic_id)
     session = InboundCallSession(
-        clinic_id=clinic_id, twilio_call_sid=call_sid, from_number=from_number, provider_id=provider_id
+        clinic_id=clinic_id, twilio_call_sid=call_sid, from_number=from_number, provider_id=provider_id,
+        language_used=config.default_language,
     )
     db.add(session)
     await db.flush()
@@ -339,7 +340,9 @@ async def voice_gather(
         return Response(content=str(vr), media_type="application/xml")
 
     session.transcript_text += f"Agent: {result.say_text}\n"
-    lang = _twilio_lang(config.default_language)
+    if result.detected_language and result.detected_language != session.language_used:
+        session.language_used = result.detected_language
+    lang = _twilio_lang(session.language_used or config.default_language)
 
     if result.action == "continue":
         vr.say(result.say_text, language=lang)
@@ -444,6 +447,8 @@ async def whatsapp_incoming(
     config, docs, rules, preferences = await _load_agent_context(db, clinic_id, session.provider_id)
     if config is None or not config.enabled:
         return Response(status_code=204)
+    if session.language_used is None:
+        session.language_used = config.default_language
 
     session.transcript_text += f"Caller: {body}\n"
     try:
@@ -461,6 +466,8 @@ async def whatsapp_incoming(
         return Response(status_code=204)
 
     session.transcript_text += f"Agent: {result.say_text}\n"
+    if result.detected_language and result.detected_language != session.language_used:
+        session.language_used = result.detected_language
     mr = MessagingResponse()
     mr.message(result.say_text)
 
