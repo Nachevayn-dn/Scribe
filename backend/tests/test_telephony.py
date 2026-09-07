@@ -100,3 +100,43 @@ async def test_connect_whatsapp_sandbox_default(client: AsyncClient):
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["whatsapp_number"] == "whatsapp:+14155238886"
+
+
+async def test_get_outbound_config_creates_default(client: AsyncClient):
+    operator = await signup_clinic(client)
+    await _make_platform_admin(operator["email"])
+    clinic_id = await _new_clinic_id(client, operator["headers"])
+
+    resp = await client.get(f"/api/v1/platform/clinics/{clinic_id}/outbound-config", headers=operator["headers"])
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["enabled"] is False
+    assert body["day_before_enabled"] is True
+    assert body["hours_before_offset"] == 2
+    assert body["email_enabled"] is True
+    assert body["sms_enabled"] is False
+
+
+async def test_update_outbound_config(client: AsyncClient):
+    operator = await signup_clinic(client)
+    await _make_platform_admin(operator["email"])
+    clinic_id = await _new_clinic_id(client, operator["headers"])
+
+    resp = await client.patch(
+        f"/api/v1/platform/clinics/{clinic_id}/outbound-config",
+        headers=operator["headers"],
+        json={
+            "enabled": True,
+            "hours_before_offset": 3,
+            "day_before_send_hour": "09:00:00",
+            "sms_enabled": True,
+            "additional_languages": ["es"],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["enabled"] is True
+    assert body["hours_before_offset"] == 3
+    assert body["day_before_send_hour"] == "09:00:00"
+    assert body["sms_enabled"] is True
+    assert body["additional_languages"] == ["es"]

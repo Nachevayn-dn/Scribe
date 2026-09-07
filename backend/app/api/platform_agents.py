@@ -19,6 +19,7 @@ from app.models.agent_decision_rule import AgentDecisionRule
 from app.models.agent_knowledge_document import AgentKnowledgeDocument
 from app.models.clinic import Clinic
 from app.models.inbound_agent_config import InboundAgentConfig
+from app.models.outbound_agent_config import OutboundAgentConfig
 from app.models.user import User
 from app.schemas.agent_content import (
     AgentDecisionRuleCreateRequest,
@@ -30,6 +31,8 @@ from app.schemas.telephony import (
     ConnectWhatsAppRequest,
     InboundAgentConfigResponse,
     InboundAgentConfigUpdateRequest,
+    OutboundAgentConfigResponse,
+    OutboundAgentConfigUpdateRequest,
     ProvisionNumberResponse,
 )
 from app.services import document_storage
@@ -172,6 +175,62 @@ async def connect_whatsapp(
         resource_type="InboundAgentConfig",
         resource_id=str(config.id),
         metadata={"whatsapp_number": config.whatsapp_number},
+        ip_address=client_ip(request),
+    )
+    await db.commit()
+    await db.refresh(config)
+    return config
+
+
+# --- Outbound agent -----------------------------------------------------
+
+
+async def _get_or_create_outbound_config(db: AsyncSession, clinic_id: uuid.UUID) -> OutboundAgentConfig:
+    result = await db.execute(
+        select(OutboundAgentConfig).where(OutboundAgentConfig.clinic_id == clinic_id)
+    )
+    config = result.scalar_one_or_none()
+    if config is None:
+        config = OutboundAgentConfig(clinic_id=clinic_id)
+        db.add(config)
+        await db.flush()
+    return config
+
+
+@router.get("/clinics/{clinic_id}/outbound-config", response_model=OutboundAgentConfigResponse)
+async def get_outbound_config(
+    clinic_id: uuid.UUID,
+    current_user: User = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+) -> OutboundAgentConfig:
+    await _get_clinic_or_404(db, clinic_id)
+    config = await _get_or_create_outbound_config(db, clinic_id)
+    await db.commit()
+    await db.refresh(config)
+    return config
+
+
+@router.patch("/clinics/{clinic_id}/outbound-config", response_model=OutboundAgentConfigResponse)
+async def update_outbound_config(
+    clinic_id: uuid.UUID,
+    payload: OutboundAgentConfigUpdateRequest,
+    request: Request,
+    current_user: User = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+) -> OutboundAgentConfig:
+    await _get_clinic_or_404(db, clinic_id)
+    config = await _get_or_create_outbound_config(db, clinic_id)
+    changes = payload.model_dump(exclude_unset=True)
+    for field, value in changes.items():
+        setattr(config, field, value)
+    await log_action(
+        db,
+        clinic_id=clinic_id,
+        actor_user_id=current_user.id,
+        action="PLATFORM_OUTBOUND_CONFIG_UPDATED",
+        resource_type="OutboundAgentConfig",
+        resource_id=str(config.id),
+        metadata={k: str(v) for k, v in changes.items()},
         ip_address=client_ip(request),
     )
     await db.commit()

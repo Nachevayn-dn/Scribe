@@ -13,6 +13,7 @@ import { EncounterRecordingPage } from "./pages/EncounterRecordingPage";
 import { SessionsListPage } from "./pages/SessionsListPage";
 import { AppointmentsPage } from "./pages/AppointmentsPage";
 import { InboundCallsPage } from "./pages/InboundCallsPage";
+import { OutboundLogPage } from "./pages/OutboundLogPage";
 import { ClinicAdminDashboard } from "./pages/ClinicAdminDashboard";
 import { ClinicAnalyticsPage } from "./pages/ClinicAnalyticsPage";
 import { PreferencesSettingsPage } from "./pages/PreferencesSettingsPage";
@@ -123,7 +124,7 @@ function AppRoutes() {
             path="/clinic/outbound"
             element={
               <RequireAuth>
-                <ComingSoonPage title="Outbound agent" description="Places outbound calls — reminders, follow-ups, and check-ins." />
+                <OutboundLogPage />
               </RequireAuth>
             }
           />

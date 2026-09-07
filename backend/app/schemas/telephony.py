@@ -54,3 +54,33 @@ class ConnectWhatsAppRequest(BaseModel):
     # Omit to use Twilio's shared sandbox sender; pass your own
     # Meta-verified WhatsApp Business number once approved.
     whatsapp_number: str | None = None
+
+
+class OutboundAgentConfigResponse(BaseModel):
+    id: uuid.UUID
+    clinic_id: uuid.UUID
+    enabled: bool
+    day_before_enabled: bool
+    day_before_send_hour: time
+    hours_before_enabled: bool
+    hours_before_offset: int
+    default_language: str
+    additional_languages: list[str]
+    email_enabled: bool
+    sms_enabled: bool
+    whatsapp_enabled: bool
+
+    model_config = {"from_attributes": True}
+
+
+class OutboundAgentConfigUpdateRequest(BaseModel):
+    enabled: bool | None = None
+    day_before_enabled: bool | None = None
+    day_before_send_hour: time | None = None
+    hours_before_enabled: bool | None = None
+    hours_before_offset: int | None = Field(default=None, ge=1, le=48)
+    default_language: str | None = None
+    additional_languages: list[str] | None = None
+    email_enabled: bool | None = None
+    sms_enabled: bool | None = None
+    whatsapp_enabled: bool | None = None

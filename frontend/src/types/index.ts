@@ -221,6 +221,21 @@ export interface InboundAgentConfig {
   share_channel: ContactChannel;
 }
 
+export interface OutboundAgentConfig {
+  id: string;
+  clinic_id: string;
+  enabled: boolean;
+  day_before_enabled: boolean;
+  day_before_send_hour: string;
+  hours_before_enabled: boolean;
+  hours_before_offset: number;
+  default_language: string;
+  additional_languages: string[];
+  email_enabled: boolean;
+  sms_enabled: boolean;
+  whatsapp_enabled: boolean;
+}
+
 export type AgentType = "INBOUND" | "OUTBOUND";
 
 export interface AgentKnowledgeDocument {
@@ -244,6 +259,23 @@ export interface AgentDecisionRule {
   condition: string;
   action: string;
   is_active: boolean;
+}
+
+export type OutboundMessageType = "APPOINTMENT_CONFIRMATION" | "REMINDER_DAY_BEFORE" | "REMINDER_HOURS_BEFORE";
+export type OutboundMessageStatus = "SENT" | "FAILED";
+
+export interface OutboundMessageLog {
+  id: string;
+  clinic_id: string;
+  appointment_id: string | null;
+  patient_id: string;
+  channel: ContactChannel;
+  message_type: OutboundMessageType;
+  body_text: string;
+  sent_at: string;
+  provider_message_id: string | null;
+  status: OutboundMessageStatus;
+  error_message: string | null;
 }
 
 export type CallOutcome = "IN_PROGRESS" | "APPOINTMENT_PROPOSED" | "INFO_ONLY" | "EMERGENCY_ESCALATED" | "ABANDONED";

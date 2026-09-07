@@ -3,6 +3,7 @@ one call's transcript/summary, and the one-click "approve appointment"
 action a doctor takes on a proposed slot. Role scoping mirrors
 appointments.py exactly (own calls for a provider, assigned providers'
 calls for an assistant, whole clinic for a super admin)."""
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, Request
@@ -17,7 +18,11 @@ from app.models.appointment import Appointment, AppointmentStatus
 from app.models.inbound_call_session import CallOutcome, InboundCallSession
 from app.models.user import ProviderAssistant, User, UserRole
 from app.schemas.call import CallSessionResponse
+from app.services.agents import outbound_agent
+from app.services.agents.outbound_agent import OutboundAgentNotConfiguredError
 from app.services.audit_service import log_action
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/calls", tags=["calls"])
 
@@ -83,9 +88,11 @@ async def approve_appointment(
     db: AsyncSession = Depends(get_db),
 ) -> InboundCallSession:
     """The one-click approval the inbound agent's proposal waits on. Flips
-    the proposed Appointment to SCHEDULED; sending the patient their
-    confirmation is the outbound agent's job (see services/agents/
-    outbound_agent.py)."""
+    the proposed Appointment to SCHEDULED, then has the outbound agent send
+    the patient their confirmation on whichever channel they used during
+    the call. Approval itself always succeeds even if the outbound send
+    doesn't (agent not configured/enabled, no channel on file, etc.) — a
+    doctor confirming a slot shouldn't be blocked by notification setup."""
     call = await _get_clinic_call(db, current_user.clinic_id, call_id)
     if not await user_can_access_call(db, current_user, call):
         raise ForbiddenError("You cannot manage this call")
@@ -114,5 +121,11 @@ async def approve_appointment(
         ip_address=client_ip(request),
     )
     await db.commit()
+
+    try:
+        await outbound_agent.send_appointment_confirmation(db, appointment)
+    except OutboundAgentNotConfiguredError as exc:
+        logger.info("Skipped sending appointment confirmation for %s: %s", appointment.id, exc)
+
     await db.refresh(call)
     return call

@@ -10,6 +10,7 @@ from app.api import (
     dashboard,
     encounters,
     notes,
+    outbound_messages,
     patients,
     platform,
     platform_agents,
@@ -27,6 +28,7 @@ api_router.include_router(patients.router)
 api_router.include_router(encounters.router)
 api_router.include_router(appointments.router)
 api_router.include_router(calls.router)
+api_router.include_router(outbound_messages.router)
 api_router.include_router(audio.router)
 api_router.include_router(notes.router)
 api_router.include_router(templates.router)

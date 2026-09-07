@@ -1,3 +1,6 @@
+import asyncio
+import contextlib
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -6,10 +9,24 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.router import api_router
 from app.config import get_settings
+from app.services.reminder_scheduler import reminder_scheduler_loop
 
 settings = get_settings()
 
-app = FastAPI(title="Healthcare AI Platform — Scribe Agent", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # The outbound agent's pre-procedure reminder sweep (see
+    # services/reminder_scheduler.py) — an in-process background loop, not
+    # a real task queue, for the MVP.
+    task = asyncio.create_task(reminder_scheduler_loop())
+    yield
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+
+
+app = FastAPI(title="Healthcare AI Platform — Scribe Agent", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

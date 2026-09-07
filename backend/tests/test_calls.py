@@ -2,6 +2,7 @@
 "approve appointment" action (api/calls.py)."""
 import uuid
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, patch
 
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -150,6 +151,60 @@ async def test_approve_appointment_flips_status_to_scheduled(client: AsyncClient
         result = await session.execute(select(Appointment).where(Appointment.id == appointment_id))
         appointment = result.scalar_one()
         assert appointment.status == AppointmentStatus.SCHEDULED
+
+
+async def test_approve_appointment_triggers_outbound_confirmation(client: AsyncClient):
+    admin = await signup_clinic(client)
+    clinic_id = await _clinic_id_for(admin["email"])
+    provider = await create_user(client, admin["headers"], role="PROVIDER")
+    provider_id = uuid.UUID(provider["id"])
+    patient_id = await _make_patient(clinic_id)
+    appointment_id = await _make_proposed_appointment(
+        clinic_id=clinic_id, patient_id=patient_id, provider_id=provider_id
+    )
+    call_id = await _make_call(
+        clinic_id=clinic_id,
+        provider_id=provider_id,
+        patient_id=patient_id,
+        outcome=CallOutcome.APPOINTMENT_PROPOSED,
+        proposed_appointment_id=appointment_id,
+    )
+
+    with patch(
+        "app.api.calls.outbound_agent.send_appointment_confirmation", new=AsyncMock()
+    ) as mock_confirm:
+        resp = await client.post(f"/api/v1/calls/{call_id}/approve-appointment", headers=provider["headers"])
+    assert resp.status_code == 200, resp.text
+    mock_confirm.assert_called_once()
+    assert mock_confirm.call_args.args[1].id == appointment_id
+
+
+async def test_approve_appointment_succeeds_even_when_outbound_agent_not_configured(client: AsyncClient):
+    # No OutboundAgentConfig exists for this clinic — the real (unmocked)
+    # send_appointment_confirmation call raises OutboundAgentNotConfiguredError,
+    # which approve_appointment must swallow rather than fail the approval on.
+    admin = await signup_clinic(client)
+    clinic_id = await _clinic_id_for(admin["email"])
+    provider = await create_user(client, admin["headers"], role="PROVIDER")
+    provider_id = uuid.UUID(provider["id"])
+    patient_id = await _make_patient(clinic_id)
+    appointment_id = await _make_proposed_appointment(
+        clinic_id=clinic_id, patient_id=patient_id, provider_id=provider_id
+    )
+    call_id = await _make_call(
+        clinic_id=clinic_id,
+        provider_id=provider_id,
+        patient_id=patient_id,
+        outcome=CallOutcome.APPOINTMENT_PROPOSED,
+        proposed_appointment_id=appointment_id,
+    )
+
+    resp = await client.post(f"/api/v1/calls/{call_id}/approve-appointment", headers=provider["headers"])
+    assert resp.status_code == 200, resp.text
+
+    async with TestSessionLocal() as session:
+        result = await session.execute(select(Appointment).where(Appointment.id == appointment_id))
+        assert result.scalar_one().status == AppointmentStatus.SCHEDULED
 
 
 async def test_approve_appointment_rejects_call_without_a_proposal(client: AsyncClient):
