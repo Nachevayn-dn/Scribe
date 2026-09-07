@@ -27,7 +27,8 @@ class InboundCallSession(UUIDPkMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("clinics.id"), nullable=False, index=True
     )
     twilio_call_sid: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
-    from_number: Mapped[str] = mapped_column(String(20), nullable=False)
+    # 30 (not a bare E.164's 20) to fit a "whatsapp:+15550001234" sender.
+    from_number: Mapped[str] = mapped_column(String(30), nullable=False)
     patient_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("patients.id"), nullable=True
     )

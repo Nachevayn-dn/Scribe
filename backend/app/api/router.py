@@ -13,6 +13,7 @@ from app.api import (
     platform,
     platform_agents,
     preferences,
+    telephony,
     templates,
     users,
 )
@@ -32,3 +33,4 @@ api_router.include_router(audit.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(platform.router)
 api_router.include_router(platform_agents.router)
+api_router.include_router(telephony.router)
