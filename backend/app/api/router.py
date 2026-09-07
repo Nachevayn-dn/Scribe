@@ -11,6 +11,7 @@ from app.api import (
     notes,
     patients,
     platform,
+    platform_agents,
     preferences,
     templates,
     users,
@@ -30,3 +31,4 @@ api_router.include_router(preferences.router)
 api_router.include_router(audit.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(platform.router)
+api_router.include_router(platform_agents.router)

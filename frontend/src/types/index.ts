@@ -104,7 +104,7 @@ export interface DashboardSummary {
   upcoming_appointments: number;
 }
 
-export type AppointmentStatus = "SCHEDULED" | "CANCELLED";
+export type AppointmentStatus = "PROPOSED" | "SCHEDULED" | "CANCELLED";
 
 export interface Appointment {
   id: string;
@@ -194,6 +194,30 @@ export interface AskAIResult {
   revised_content: string | null;
   answer: string | null;
   sources: AskAISource[];
+}
+
+export type PickupMode = "ALWAYS" | "AFTER_HOURS" | "NO_ANSWER";
+export type SummaryShareWith = "DOCTOR_ONLY" | "TEAM";
+export type ContactChannel = "EMAIL" | "SMS" | "WHATSAPP";
+
+export interface InboundAgentConfig {
+  id: string;
+  clinic_id: string;
+  enabled: boolean;
+  phone_number: string | null;
+  phone_number_sid: string | null;
+  whatsapp_number: string | null;
+  default_language: string;
+  additional_languages: string[];
+  greeting_text: string;
+  pickup_mode: PickupMode;
+  after_hours_start: string | null;
+  after_hours_end: string | null;
+  no_answer_timeout_seconds: number;
+  forward_to_number: string | null;
+  recording_enabled: boolean;
+  share_summary_with: SummaryShareWith;
+  share_channel: ContactChannel;
 }
 
 export interface AuditLogEntry {

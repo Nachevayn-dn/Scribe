@@ -40,6 +40,22 @@ class Settings(BaseSettings):
     resend_api_key: str | None = None
     resend_from_email: str = "MedicDesk.ai <onboarding@resend.dev>"
 
+    # Inbound/outbound agents — phone, SMS, WhatsApp via Twilio
+    # (console.twilio.com). Buying a phone number and sending
+    # SMS/WhatsApp/voice minutes are real, billed usage on your Twilio
+    # account — not free like Resend's tier. twilio_whatsapp_from defaults
+    # to Twilio's shared sandbox sender; swap in your own Meta-verified
+    # WhatsApp Business number here once approved, no code changes needed.
+    twilio_account_sid: str | None = None
+    twilio_auth_token: str | None = None
+    twilio_whatsapp_from: str = "whatsapp:+14155238886"
+    # The publicly reachable base URL Twilio should call back to for voice/
+    # SMS/WhatsApp webhooks (e.g. your ngrok URL while testing, or your real
+    # deployment's URL once live). Required before "Generate phone number"
+    # can wire up webhooks — without it a number can still be purchased but
+    # won't route calls anywhere useful.
+    public_base_url: str | None = None
+
     # Storage
     audio_storage_dir: str = "./data/audio"
     avatar_storage_dir: str = "./data/avatars"

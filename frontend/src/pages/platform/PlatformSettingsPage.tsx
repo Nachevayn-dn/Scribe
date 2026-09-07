@@ -2,9 +2,18 @@ import { useEffect, useState } from "react";
 import * as platformApi from "../../api/platform";
 import { ApiError } from "../../api/client";
 import { IntegrationsPage } from "../IntegrationsPage";
+import { TelephonyTab } from "./TelephonyTab";
 import type { Clinic, ClinicDocument, ClinicDocumentType, User, UserRole } from "../../types";
 
-type Tab = "clinics" | "team" | "documents" | "integrations";
+type Tab = "clinics" | "team" | "telephony" | "documents" | "integrations";
+
+const TAB_LABELS: Record<Tab, string> = {
+  clinics: "Clinics",
+  team: "Team",
+  telephony: "Telephony",
+  documents: "Documents",
+  integrations: "Integrations",
+};
 
 const DOC_TYPE_LABELS: Record<ClinicDocumentType, string> = {
   CONTRACT: "Signed contract",
@@ -43,14 +52,14 @@ export function PlatformSettingsPage() {
       <h1 style={{ fontSize: 22 }}>Settings</h1>
 
       <div className="row" style={{ flexWrap: "wrap" }}>
-        {(["clinics", "team", "documents", "integrations"] as Tab[]).map((t) => (
+        {(["clinics", "team", "telephony", "documents", "integrations"] as Tab[]).map((t) => (
           <button
             key={t}
             className="btn"
             style={tab === t ? { borderColor: "var(--color-primary)", color: "var(--color-primary)" } : undefined}
             onClick={() => setTab(t)}
           >
-            {t === "clinics" ? "Clinics" : t === "team" ? "Team" : t === "documents" ? "Documents" : "Integrations"}
+            {TAB_LABELS[t]}
           </button>
         ))}
       </div>
@@ -78,6 +87,7 @@ export function PlatformSettingsPage() {
       )}
 
       {tab === "team" && selectedClinic && <TeamTab clinic={selectedClinic} />}
+      {tab === "telephony" && selectedClinic && <TelephonyTab clinic={selectedClinic} />}
       {tab === "documents" && selectedClinic && <DocumentsTab clinic={selectedClinic} />}
       {tab === "integrations" && <IntegrationsPage />}
     </div>

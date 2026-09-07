@@ -16,6 +16,10 @@ from app.models.base import Base, TimestampMixin, UUIDPkMixin
 
 
 class AppointmentStatus(str, enum.Enum):
+    # Created by the inbound agent from a call, awaiting the doctor's
+    # one-click approval (see POST /calls/{id}/approve-appointment) before
+    # it's confirmed and the outbound agent notifies the patient.
+    PROPOSED = "PROPOSED"
     SCHEDULED = "SCHEDULED"
     CANCELLED = "CANCELLED"
 
@@ -46,6 +50,14 @@ class Appointment(UUIDPkMixin, TimestampMixin, Base):
         Enum(AppointmentStatus, name="appointment_status"),
         default=AppointmentStatus.SCHEDULED,
         nullable=False,
+    )
+    # Idempotency stamps for the outbound reminder scheduler — cheaper than
+    # joining OutboundMessageLog on every poll to ask "already sent this?"
+    reminder_day_before_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    reminder_hours_before_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
     patient: Mapped["Patient"] = relationship(lazy="selectin")  # noqa: F821
