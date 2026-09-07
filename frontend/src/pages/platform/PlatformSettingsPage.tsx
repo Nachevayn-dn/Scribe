@@ -72,7 +72,16 @@ export function PlatformSettingsPage() {
 
       {error && <div className="error-text">{error}</div>}
 
-      {tab === "clinics" && <ClinicsTab clinics={clinics} onCreated={refreshClinics} />}
+      {tab === "clinics" && (
+        <ClinicsTab
+          clinics={clinics}
+          onCreated={refreshClinics}
+          onOpenClinic={(clinicId) => {
+            setSelectedClinicId(clinicId);
+            setTab("team");
+          }}
+        />
+      )}
 
       {tab !== "clinics" && tab !== "integrations" && (
         <label className="row" style={{ gap: 8 }}>
@@ -103,7 +112,15 @@ export function PlatformSettingsPage() {
   );
 }
 
-function ClinicsTab({ clinics, onCreated }: { clinics: Clinic[]; onCreated: () => void }) {
+function ClinicsTab({
+  clinics,
+  onCreated,
+  onOpenClinic,
+}: {
+  clinics: Clinic[];
+  onCreated: () => void;
+  onOpenClinic: (clinicId: string) => void;
+}) {
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
@@ -157,7 +174,22 @@ function ClinicsTab({ clinics, onCreated }: { clinics: Clinic[]; onCreated: () =
           <tbody>
             {clinics.map((c) => (
               <tr key={c.id}>
-                <td>{c.name}</td>
+                <td>
+                  <button
+                    style={{
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      color: "var(--color-primary)",
+                      cursor: "pointer",
+                      font: "inherit",
+                      textDecoration: "underline",
+                    }}
+                    onClick={() => onOpenClinic(c.id)}
+                  >
+                    {c.name}
+                  </button>
+                </td>
                 <td>{c.address ?? "—"}</td>
                 <td>{c.phone ?? "—"}</td>
               </tr>
@@ -308,25 +340,24 @@ function TeamTab({ clinic }: { clinic: Clinic }) {
                   )}
                 </td>
                 <td>
-                  {!d.password_set_at &&
-                    (generatingFor === d.id ? (
-                      <div className="row">
-                        <label className="row" style={{ gap: 4, fontSize: 12 }}>
-                          <input type="checkbox" checked={sendEmailChecked} onChange={(e) => setSendEmailChecked(e.target.checked)} />
-                          Email it
-                        </label>
-                        <button className="btn btn-primary" disabled={generating} onClick={() => handleGenerate(d)}>
-                          {generating ? "Generating…" : "Generate"}
-                        </button>
-                        <button className="btn" onClick={() => setGeneratingFor(null)}>
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <button className="btn" onClick={() => setGeneratingFor(d.id)}>
-                        Generate credentials
+                  {generatingFor === d.id ? (
+                    <div className="row">
+                      <label className="row" style={{ gap: 4, fontSize: 12 }}>
+                        <input type="checkbox" checked={sendEmailChecked} onChange={(e) => setSendEmailChecked(e.target.checked)} />
+                        Email it
+                      </label>
+                      <button className="btn btn-primary" disabled={generating} onClick={() => handleGenerate(d)}>
+                        {generating ? "Generating…" : "Generate"}
                       </button>
-                    ))}
+                      <button className="btn" onClick={() => setGeneratingFor(null)}>
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button className="btn" onClick={() => setGeneratingFor(d.id)}>
+                      {d.password_set_at ? "Reset credentials" : "Generate credentials"}
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
