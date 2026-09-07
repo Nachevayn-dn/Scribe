@@ -5,6 +5,7 @@ from app.api import (
     audio,
     audit,
     auth,
+    calls,
     clinics,
     dashboard,
     encounters,
@@ -25,6 +26,7 @@ api_router.include_router(users.router)
 api_router.include_router(patients.router)
 api_router.include_router(encounters.router)
 api_router.include_router(appointments.router)
+api_router.include_router(calls.router)
 api_router.include_router(audio.router)
 api_router.include_router(notes.router)
 api_router.include_router(templates.router)

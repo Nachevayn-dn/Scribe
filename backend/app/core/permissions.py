@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appointment import Appointment
 from app.models.encounter import Encounter
+from app.models.inbound_call_session import InboundCallSession
 from app.models.user import ProviderAssistant, User, UserRole
 
 
@@ -56,6 +57,21 @@ async def user_can_access_appointment(db: AsyncSession, user: User, appointment:
         return user.id == appointment.provider_id
     if user.role == UserRole.ASSISTANT:
         return await assistant_can_access_provider(db, user.id, appointment.provider_id)
+    return False
+
+
+async def user_can_access_call(db: AsyncSession, user: User, call: InboundCallSession) -> bool:
+    """Same shape as user_can_access_appointment. A call with no matched
+    provider (the clinic had no active doctor when it came in) is
+    SUPER_ADMIN-only — there's no doctor to attribute it to yet."""
+    if user.role == UserRole.SUPER_ADMIN:
+        return user.clinic_id == call.clinic_id
+    if call.provider_id is None:
+        return False
+    if user.role == UserRole.PROVIDER:
+        return user.id == call.provider_id
+    if user.role == UserRole.ASSISTANT:
+        return await assistant_can_access_provider(db, user.id, call.provider_id)
     return False
 
 

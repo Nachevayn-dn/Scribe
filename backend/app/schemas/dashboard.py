@@ -8,3 +8,6 @@ class DashboardSummaryResponse(BaseModel):
     # scheduled_time in the next 7 days — forward-looking, unlike the field
     # above which counts past sessions tagged as covering an appointment.
     upcoming_appointments: int
+    # Inbound-agent calls that started in the last 7 days (see
+    # InboundCallSession) — the "Inbound calls" widget.
+    inbound_calls_this_week: int

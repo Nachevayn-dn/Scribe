@@ -9,6 +9,7 @@ from app.database import get_db
 from app.deps import get_current_user
 from app.models.appointment import Appointment, AppointmentStatus
 from app.models.encounter import Encounter
+from app.models.inbound_call_session import InboundCallSession
 from app.models.user import ProviderAssistant, User, UserRole
 from app.schemas.dashboard import DashboardSummaryResponse
 
@@ -33,10 +34,12 @@ async def get_dashboard_summary(
     # Same clinic/role scoping as GET /encounters (list_encounters).
     stmt = select(Encounter).where(Encounter.clinic_id == current_user.clinic_id)
     appt_stmt = select(Appointment).where(Appointment.clinic_id == current_user.clinic_id)
+    call_stmt = select(InboundCallSession).where(InboundCallSession.clinic_id == current_user.clinic_id)
 
     if current_user.role == UserRole.PROVIDER:
         stmt = stmt.where(Encounter.provider_id == current_user.id)
         appt_stmt = appt_stmt.where(Appointment.provider_id == current_user.id)
+        call_stmt = call_stmt.where(InboundCallSession.provider_id == current_user.id)
     elif current_user.role == UserRole.ASSISTANT:
         assigned = await _assigned_provider_ids(db, current_user.id)
         if not assigned:
@@ -44,9 +47,11 @@ async def get_dashboard_summary(
                 sessions_this_week=0,
                 scheduled_appointment_sessions_this_week=0,
                 upcoming_appointments=0,
+                inbound_calls_this_week=0,
             )
         stmt = stmt.where(Encounter.provider_id.in_(assigned))
         appt_stmt = appt_stmt.where(Appointment.provider_id.in_(assigned))
+        call_stmt = call_stmt.where(InboundCallSession.provider_id.in_(assigned))
     # SUPER_ADMIN sees the whole clinic — no extra filter.
 
     # Rolling 7-day window rather than a calendar week, to sidestep
@@ -78,8 +83,17 @@ async def get_dashboard_summary(
         )
     ).scalar_one()
 
+    inbound_calls = (
+        await db.execute(
+            select(func.count()).select_from(
+                call_stmt.where(InboundCallSession.started_at >= week_start).subquery()
+            )
+        )
+    ).scalar_one()
+
     return DashboardSummaryResponse(
         sessions_this_week=counts[0],
         scheduled_appointment_sessions_this_week=counts[1],
         upcoming_appointments=upcoming,
+        inbound_calls_this_week=inbound_calls,
     )

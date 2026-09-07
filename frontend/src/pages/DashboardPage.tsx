@@ -63,6 +63,12 @@ export function DashboardPage() {
           hint="Upcoming, next 7 days"
           to="/appointments?range=week"
         />
+        <StatWidget
+          label="Inbound calls"
+          value={summary?.inbound_calls_this_week ?? 0}
+          hint="Last 7 days"
+          to="/clinic/inbound"
+        />
       </div>
 
       <div className="row" style={{ justifyContent: "space-between" }}>

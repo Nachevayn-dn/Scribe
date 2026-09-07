@@ -102,6 +102,7 @@ export interface DashboardSummary {
   sessions_this_week: number;
   scheduled_appointment_sessions_this_week: number;
   upcoming_appointments: number;
+  inbound_calls_this_week: number;
 }
 
 export type AppointmentStatus = "PROPOSED" | "SCHEDULED" | "CANCELLED";
@@ -243,6 +244,29 @@ export interface AgentDecisionRule {
   condition: string;
   action: string;
   is_active: boolean;
+}
+
+export type CallOutcome = "IN_PROGRESS" | "APPOINTMENT_PROPOSED" | "INFO_ONLY" | "EMERGENCY_ESCALATED" | "ABANDONED";
+
+export interface CallSession {
+  id: string;
+  clinic_id: string;
+  patient_id: string | null;
+  provider_id: string | null;
+  from_number: string;
+  started_at: string;
+  ended_at: string | null;
+  duration_seconds: number | null;
+  recording_sid: string | null;
+  recording_url: string | null;
+  transcript_text: string;
+  summary_text: string | null;
+  outcome: CallOutcome;
+  proposed_appointment_id: string | null;
+  preferred_contact_channel: ContactChannel | null;
+  language_used: string | null;
+  summary_shared_at: string | null;
+  created_at: string;
 }
 
 export interface AuditLogEntry {

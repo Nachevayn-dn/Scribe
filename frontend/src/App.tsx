@@ -12,6 +12,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { EncounterRecordingPage } from "./pages/EncounterRecordingPage";
 import { SessionsListPage } from "./pages/SessionsListPage";
 import { AppointmentsPage } from "./pages/AppointmentsPage";
+import { InboundCallsPage } from "./pages/InboundCallsPage";
 import { ClinicAdminDashboard } from "./pages/ClinicAdminDashboard";
 import { ClinicAnalyticsPage } from "./pages/ClinicAnalyticsPage";
 import { PreferencesSettingsPage } from "./pages/PreferencesSettingsPage";
@@ -114,7 +115,7 @@ function AppRoutes() {
             path="/clinic/inbound"
             element={
               <RequireAuth>
-                <ComingSoonPage title="Inbound agent" description="Handles incoming patient calls — scheduling, triage, and FAQs." />
+                <InboundCallsPage />
               </RequireAuth>
             }
           />
