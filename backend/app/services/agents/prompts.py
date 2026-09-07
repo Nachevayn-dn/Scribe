@@ -34,7 +34,10 @@ INBOUND_AGENT_TOOLS = [
             "type": "object",
             "properties": {
                 "closing_text": {"type": "string", "description": "What to say before hanging up."},
-                "patient_full_name": {"type": "string"},
+                "patient_full_name": {
+                    "type": "string",
+                    "description": "The caller's name as confirmed with them (read back and, if unusual, spelled out) — not just what speech recognition first heard.",
+                },
                 "date_of_birth": {
                     "type": "string",
                     "description": "The caller's date of birth, ISO 8601 (YYYY-MM-DD) — ask for it before proposing.",
@@ -106,6 +109,11 @@ def build_inbound_system_prompt(
         "proposing an appointment you need the caller's full name, date of birth, what they "
         "need, a preferred day/time, and how they'd like to be contacted (phone/text or email) "
         "— ask for whichever of these you don't have yet, one at a time.",
+        "Phone speech recognition often mishears names, especially uncommon or non-English "
+        "ones. After the caller states their name, always read it back to confirm — e.g. "
+        "\"I have your name as [name], is that right?\" — and if they correct you or the name "
+        "sounds unusual, ask them to spell it out letter by letter. Never finalize an "
+        "appointment with a name you haven't confirmed this way.",
         f"Current date/time: {now}.",
         f"Speak in: {config.default_language}"
         + (f" (also fluent in: {', '.join(config.additional_languages)})" if config.additional_languages else "")
