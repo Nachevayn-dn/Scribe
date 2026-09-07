@@ -36,3 +36,10 @@ class AgentKnowledgeDocument(UUIDPkMixin, Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+    @property
+    def has_extracted_text(self) -> bool:
+        """Whether prompt-ready text was pulled out at upload time — the
+        raw extracted_text itself is never serialized to the API (list
+        responses would balloon), just this flag."""
+        return bool(self.extracted_text)

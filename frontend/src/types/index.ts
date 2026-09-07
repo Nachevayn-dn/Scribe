@@ -220,6 +220,31 @@ export interface InboundAgentConfig {
   share_channel: ContactChannel;
 }
 
+export type AgentType = "INBOUND" | "OUTBOUND";
+
+export interface AgentKnowledgeDocument {
+  id: string;
+  clinic_id: string;
+  agent_type: AgentType;
+  title: string;
+  original_filename: string;
+  mime_type: string;
+  has_extracted_text: boolean;
+  is_active: boolean;
+  uploaded_by_id: string;
+  created_at: string;
+}
+
+export interface AgentDecisionRule {
+  id: string;
+  clinic_id: string;
+  provider_id: string | null;
+  priority: number;
+  condition: string;
+  action: string;
+  is_active: boolean;
+}
+
 export interface AuditLogEntry {
   id: string;
   actor_user_id: string | null;

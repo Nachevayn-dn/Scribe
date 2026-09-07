@@ -2,15 +2,19 @@ import { useEffect, useState } from "react";
 import * as platformApi from "../../api/platform";
 import { ApiError } from "../../api/client";
 import { IntegrationsPage } from "../IntegrationsPage";
+import { DecisionRulesTab } from "./DecisionRulesTab";
+import { KnowledgeBaseTab } from "./KnowledgeBaseTab";
 import { TelephonyTab } from "./TelephonyTab";
 import type { Clinic, ClinicDocument, ClinicDocumentType, User, UserRole } from "../../types";
 
-type Tab = "clinics" | "team" | "telephony" | "documents" | "integrations";
+type Tab = "clinics" | "team" | "telephony" | "knowledge" | "rules" | "documents" | "integrations";
 
 const TAB_LABELS: Record<Tab, string> = {
   clinics: "Clinics",
   team: "Team",
   telephony: "Telephony",
+  knowledge: "Knowledge base",
+  rules: "Decision rules",
   documents: "Documents",
   integrations: "Integrations",
 };
@@ -52,7 +56,7 @@ export function PlatformSettingsPage() {
       <h1 style={{ fontSize: 22 }}>Settings</h1>
 
       <div className="row" style={{ flexWrap: "wrap" }}>
-        {(["clinics", "team", "telephony", "documents", "integrations"] as Tab[]).map((t) => (
+        {(["clinics", "team", "telephony", "knowledge", "rules", "documents", "integrations"] as Tab[]).map((t) => (
           <button
             key={t}
             className="btn"
@@ -88,6 +92,8 @@ export function PlatformSettingsPage() {
 
       {tab === "team" && selectedClinic && <TeamTab clinic={selectedClinic} />}
       {tab === "telephony" && selectedClinic && <TelephonyTab clinic={selectedClinic} />}
+      {tab === "knowledge" && selectedClinic && <KnowledgeBaseTab clinic={selectedClinic} />}
+      {tab === "rules" && selectedClinic && <DecisionRulesTab clinic={selectedClinic} />}
       {tab === "documents" && selectedClinic && <DocumentsTab clinic={selectedClinic} />}
       {tab === "integrations" && <IntegrationsPage />}
     </div>
