@@ -155,6 +155,14 @@ def test_within_after_hours_handles_wrapping_and_non_wrapping_windows():
     assert _within_after_hours(time(12, 0), None, None) is False
 
 
+def test_twilio_lang_maps_russian_and_turkish():
+    from app.api.telephony import _twilio_lang
+
+    assert _twilio_lang("ru") == "ru-RU"
+    assert _twilio_lang("tr") == "tr-TR"
+    assert _twilio_lang("xx") == "en-US"  # unknown code falls back safely
+
+
 async def test_incoming_call_creates_session_and_gathers(client: AsyncClient):
     setup = await _setup_clinic_with_provider(client)
     await _enable_config(setup["clinic_id"])

@@ -41,7 +41,7 @@ _TWILIO_LANGUAGE_MAP = {
     "nl": "nl-NL", "et": "et-EE", "fi": "fi-FI", "fr": "fr-FR", "de": "de-DE",
     "el": "el-GR", "hu": "hu-HU", "it": "it-IT", "lv": "lv-LV", "lt": "lt-LT",
     "pl": "pl-PL", "pt": "pt-PT", "ro": "ro-RO", "sk": "sk-SK", "sl": "sl-SI",
-    "es": "es-ES", "sv": "sv-SE",
+    "es": "es-ES", "sv": "sv-SE", "ru": "ru-RU", "tr": "tr-TR",
 }
 
 
