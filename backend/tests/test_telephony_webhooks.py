@@ -554,3 +554,87 @@ async def test_whatsapp_incoming_disabled_agent_is_silent(client: AsyncClient):
             data={"From": "whatsapp:+15550001010", "Body": "Hello?", "MessageSid": "SM3"},
         )
     assert resp.status_code == 204
+
+
+def _patch_elevenlabs_configured():
+    return patch("app.api.telephony.settings.elevenlabs_api_key", "fake-key")
+
+
+async def test_greeting_uses_elevenlabs_play_when_configured(client: AsyncClient):
+    setup = await _setup_clinic_with_provider(client)
+    await _enable_config(setup["clinic_id"])
+
+    with _patch_signature_ok(), _patch_elevenlabs_configured(), patch(
+        "app.api.telephony.elevenlabs_client.synthesize_speech", new=AsyncMock(return_value=b"fake-mp3-bytes")
+    ):
+        resp = await client.post(
+            VOICE_URL.format(clinic_id=setup["clinic_id"]),
+            data={"CallSid": "CA-elevenlabs", "From": "+15550001111"},
+        )
+    assert resp.status_code == 200
+    assert "<Play>" in resp.text
+    assert "<Say" not in resp.text  # ElevenLabs replaced the greeting entirely
+
+    # Extract the token from the <Play> URL and fetch it, single-use.
+    import re
+
+    match = re.search(r"<Play>(.+?)</Play>", resp.text)
+    assert match
+    audio_url = match.group(1)
+    token = audio_url.rsplit("/", 1)[-1]
+
+    audio_resp = await client.get(f"/api/v1/telephony/tts-audio/{token}")
+    assert audio_resp.status_code == 200
+    assert audio_resp.content == b"fake-mp3-bytes"
+    assert audio_resp.headers["content-type"] == "audio/mpeg"
+
+    # Single-use — a second fetch of the same token is gone.
+    second_resp = await client.get(f"/api/v1/telephony/tts-audio/{token}")
+    assert second_resp.status_code == 404
+
+
+async def test_elevenlabs_failure_falls_back_to_twilio_say(client: AsyncClient):
+    setup = await _setup_clinic_with_provider(client)
+    await _enable_config(setup["clinic_id"])
+
+    with _patch_signature_ok(), _patch_elevenlabs_configured(), patch(
+        "app.api.telephony.elevenlabs_client.synthesize_speech",
+        new=AsyncMock(side_effect=RuntimeError("ElevenLabs is down")),
+    ):
+        resp = await client.post(
+            VOICE_URL.format(clinic_id=setup["clinic_id"]),
+            data={"CallSid": "CA-elevenlabs-fail", "From": "+15550001111"},
+        )
+    assert resp.status_code == 200
+    assert "<Say" in resp.text  # fell back cleanly instead of breaking the call
+    assert "<Play>" not in resp.text
+
+
+async def test_tts_audio_unknown_token_404s(client: AsyncClient):
+    resp = await client.get("/api/v1/telephony/tts-audio/does-not-exist")
+    assert resp.status_code == 404
+
+
+async def test_gather_continue_uses_elevenlabs_when_configured(client: AsyncClient):
+    setup = await _setup_clinic_with_provider(client)
+    await _enable_config(setup["clinic_id"])
+
+    with _patch_signature_ok():
+        await client.post(
+            VOICE_URL.format(clinic_id=setup["clinic_id"]),
+            data={"CallSid": "CA-elevenlabs-gather", "From": "+15550001111"},
+        )
+
+    turn_result = InboundAgentTurnResult(action="continue", say_text="How can I help?")
+    with _patch_signature_ok(), _patch_elevenlabs_configured(), patch(
+        "app.api.telephony.inbound_agent.next_turn", new=AsyncMock(return_value=turn_result)
+    ), patch(
+        "app.api.telephony.elevenlabs_client.synthesize_speech", new=AsyncMock(return_value=b"turn-audio")
+    ):
+        resp = await client.post(
+            GATHER_URL.format(clinic_id=setup["clinic_id"]),
+            data={"CallSid": "CA-elevenlabs-gather", "SpeechResult": "Hi there"},
+        )
+    assert resp.status_code == 200
+    assert "<Play>" in resp.text
+    assert "<Gather" in resp.text

@@ -56,6 +56,16 @@ class Settings(BaseSettings):
     # won't route calls anywhere useful.
     public_base_url: str | None = None
 
+    # Optional: swaps the inbound agent's Twilio <Say> voice (robotic) for
+    # a natural ElevenLabs one (elevenlabs.io/app/settings/api-keys). Falls
+    # back to Twilio's own voice automatically when not set — this is a
+    # pure upgrade, not required. Twilio's own speech recognition (hearing
+    # the caller) is unaffected either way. elevenlabs_voice_id defaults to
+    # "Rachel", one of ElevenLabs' premade voices; pick a different one at
+    # elevenlabs.io/app/voice-library and swap the ID here, no code change.
+    elevenlabs_api_key: str | None = None
+    elevenlabs_voice_id: str = "21m00Tcm4TlvDq8ikWAM"
+
     # Storage
     audio_storage_dir: str = "./data/audio"
     avatar_storage_dir: str = "./data/avatars"

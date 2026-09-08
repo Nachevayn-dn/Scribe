@@ -2,6 +2,7 @@
 and inbound WhatsApp messages. No auth dependency; Twilio calls these
 directly, so every handler verifies the request signature first."""
 import logging
+import time as _clock
 import uuid
 from datetime import date, datetime, time, timedelta, timezone
 
@@ -27,7 +28,7 @@ from app.services.agents import call_summary, inbound_agent
 from app.services.agents.base import InboundAgentTurnResult
 from app.services.email_service import EmailNotConfiguredError, send_share_email
 from app.services.preference_engine import get_active_preferences
-from app.services.telephony import twilio_client
+from app.services.telephony import elevenlabs_client, twilio_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/telephony", tags=["telephony"])
@@ -52,6 +53,46 @@ def _twilio_lang(code: str) -> str:
 def _webhook_url(path: str) -> str:
     base = (settings.public_base_url or "").rstrip("/")
     return f"{base}{settings.api_v1_prefix}/telephony{path}"
+
+
+# In-memory, single-use cache for ElevenLabs-generated audio clips (see
+# _speak() below) — Twilio's <Play> needs a URL, not raw bytes, so each
+# clip gets a short-lived token here and GET /tts-audio/{token} serves and
+# immediately discards it. No task queue / no disk writes for the MVP,
+# same "single in-process worker is enough at this scale" trade-off used
+# throughout this app (see services/pipeline.py, reminder_scheduler.py);
+# the opportunistic sweep below is just a safety net for a clip Twilio
+# never actually fetched (e.g. the caller hung up mid-turn).
+_TTS_CACHE: dict[str, bytes] = {}
+_TTS_CACHE_TIMESTAMPS: dict[str, float] = {}
+_TTS_CACHE_MAX_AGE_SECONDS = 300
+
+
+def _evict_stale_tts_cache_entries() -> None:
+    now = _clock.monotonic()
+    stale = [token for token, ts in _TTS_CACHE_TIMESTAMPS.items() if now - ts > _TTS_CACHE_MAX_AGE_SECONDS]
+    for token in stale:
+        _TTS_CACHE.pop(token, None)
+        _TTS_CACHE_TIMESTAMPS.pop(token, None)
+
+
+async def _speak(vr: VoiceResponse, text: str, twilio_lang: str) -> None:
+    """The one place both voice_incoming and voice_gather produce spoken
+    output — uses ElevenLabs for a natural voice when configured, falling
+    back to Twilio's own <Say> (unaffected either way) otherwise or if the
+    ElevenLabs call fails, so a bad synthesis never breaks the call."""
+    if settings.elevenlabs_api_key:
+        try:
+            audio_bytes = await elevenlabs_client.synthesize_speech(text)
+            token = uuid.uuid4().hex
+            _TTS_CACHE[token] = audio_bytes
+            _TTS_CACHE_TIMESTAMPS[token] = _clock.monotonic()
+            _evict_stale_tts_cache_entries()
+            vr.play(_webhook_url(f"/tts-audio/{token}"))
+            return
+        except Exception:  # noqa: BLE001 — fall back rather than fail the call
+            logger.exception("ElevenLabs synthesis failed, falling back to Twilio's voice")
+    vr.say(text, language=twilio_lang)
 
 
 def _within_after_hours(now_t: time, start: time | None, end: time | None) -> bool:
@@ -139,6 +180,17 @@ async def _load_agent_context(db: AsyncSession, clinic_id: uuid.UUID, provider_i
     return config, list(docs), list(rules), preferences
 
 
+@router.get("/tts-audio/{token}")
+async def get_tts_audio(token: str) -> Response:
+    """Twilio's <Play> fetches the ElevenLabs-generated clip from here —
+    see _speak() above. Single-use: served once, then discarded."""
+    audio_bytes = _TTS_CACHE.pop(token, None)
+    _TTS_CACHE_TIMESTAMPS.pop(token, None)
+    if audio_bytes is None:
+        raise HTTPException(status_code=404, detail="Audio not found or already played")
+    return Response(content=audio_bytes, media_type="audio/mpeg")
+
+
 @router.post("/voice/{clinic_id}/incoming")
 async def voice_incoming(
     clinic_id: uuid.UUID, request: Request, db: AsyncSession = Depends(get_db)
@@ -188,7 +240,7 @@ async def voice_incoming(
         )
 
     lang = _twilio_lang(config.default_language)
-    vr.say(config.greeting_text, language=lang)
+    await _speak(vr, config.greeting_text, lang)
     vr.gather(
         input="speech", action=_webhook_url(f"/voice/{clinic_id}/gather"), method="POST",
         speech_timeout="auto", language=lang,
@@ -345,7 +397,7 @@ async def voice_gather(
     lang = _twilio_lang(session.language_used or config.default_language)
 
     if result.action == "continue":
-        vr.say(result.say_text, language=lang)
+        await _speak(vr, result.say_text, lang)
         vr.gather(
             input="speech", action=_webhook_url(f"/voice/{clinic_id}/gather"), method="POST",
             speech_timeout="auto", language=lang,
@@ -353,7 +405,7 @@ async def voice_gather(
         await db.commit()
         return Response(content=str(vr), media_type="application/xml")
 
-    vr.say(result.say_text, language=lang)
+    await _speak(vr, result.say_text, lang)
     vr.hangup()
     await _finalize_call(db, session, config, result)
     return Response(content=str(vr), media_type="application/xml")
