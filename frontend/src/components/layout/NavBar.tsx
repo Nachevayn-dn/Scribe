@@ -56,6 +56,9 @@ export function NavBar() {
           <DoctorAvatar />
           <div className="stack" style={{ gap: 2, minWidth: 0 }}>
             <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: "nowrap" }}>{user.full_name}</span>
+            <span style={{ fontSize: 12, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
+              {user.clinic_name}
+            </span>
             <span className="badge" style={{ whiteSpace: "nowrap", width: "fit-content" }}>
               {ROLE_LABELS[user.role] ?? user.role}
             </span>

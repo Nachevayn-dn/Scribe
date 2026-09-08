@@ -39,6 +39,82 @@ async def test_platform_admin_can_create_clinic(client: AsyncClient):
     assert any(c["id"] == clinic["id"] for c in list_resp.json())
 
 
+async def test_platform_admin_can_update_clinic_details(client: AsyncClient):
+    operator = await signup_clinic(client)
+    await _make_platform_admin(operator["email"])
+
+    create_resp = await client.post(
+        "/api/v1/platform/clinics", headers=operator["headers"], json={"name": "Original Name"}
+    )
+    clinic_id = create_resp.json()["id"]
+
+    resp = await client.patch(
+        f"/api/v1/platform/clinics/{clinic_id}",
+        headers=operator["headers"],
+        json={"contact_email": "clinic@example.com", "staff_email": "frontdesk@example.com"},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["contact_email"] == "clinic@example.com"
+    assert body["staff_email"] == "frontdesk@example.com"
+    assert body["name"] == "Original Name"  # untouched field stays as-is
+
+
+async def test_updating_one_clinics_email_does_not_affect_another(client: AsyncClient):
+    """The exact scenario a platform admin managing multiple clinics needs
+    guaranteed: each clinic's email is its own row, fully independent."""
+    operator = await signup_clinic(client)
+    await _make_platform_admin(operator["email"])
+
+    clinic_a = (
+        await client.post("/api/v1/platform/clinics", headers=operator["headers"], json={"name": "Clinic A"})
+    ).json()
+    clinic_b = (
+        await client.post("/api/v1/platform/clinics", headers=operator["headers"], json={"name": "Clinic B"})
+    ).json()
+
+    await client.patch(
+        f"/api/v1/platform/clinics/{clinic_a['id']}",
+        headers=operator["headers"],
+        json={"contact_email": "a@example.com"},
+    )
+    await client.patch(
+        f"/api/v1/platform/clinics/{clinic_b['id']}",
+        headers=operator["headers"],
+        json={"contact_email": "b@example.com"},
+    )
+
+    list_resp = await client.get("/api/v1/platform/clinics", headers=operator["headers"])
+    by_id = {c["id"]: c for c in list_resp.json()}
+    assert by_id[clinic_a["id"]]["contact_email"] == "a@example.com"
+    assert by_id[clinic_b["id"]]["contact_email"] == "b@example.com"
+
+
+async def test_update_clinic_requires_platform_admin(client: AsyncClient):
+    operator = await signup_clinic(client)
+    await _make_platform_admin(operator["email"])
+    clinic_id = (
+        await client.post("/api/v1/platform/clinics", headers=operator["headers"], json={"name": "Some Clinic"})
+    ).json()["id"]
+
+    outsider = await signup_clinic(client)  # not a platform admin
+    resp = await client.patch(
+        f"/api/v1/platform/clinics/{clinic_id}", headers=outsider["headers"], json={"contact_email": "x@example.com"}
+    )
+    assert resp.status_code == 403
+
+
+async def test_update_nonexistent_clinic_404s(client: AsyncClient):
+    operator = await signup_clinic(client)
+    await _make_platform_admin(operator["email"])
+    resp = await client.patch(
+        "/api/v1/platform/clinics/00000000-0000-0000-0000-000000000000",
+        headers=operator["headers"],
+        json={"contact_email": "x@example.com"},
+    )
+    assert resp.status_code == 404
+
+
 async def test_provision_doctor_then_generate_credentials(client: AsyncClient):
     operator = await signup_clinic(client)
     await _make_platform_admin(operator["email"])

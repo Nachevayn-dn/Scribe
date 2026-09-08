@@ -4,6 +4,7 @@ export type ThemePreference = "midnight" | "jade";
 export interface CurrentUser {
   id: string;
   clinic_id: string;
+  clinic_name: string;
   email: string;
   full_name: string;
   role: UserRole;
@@ -28,6 +29,7 @@ export interface Clinic {
 export interface User {
   id: string;
   clinic_id: string;
+  clinic_name: string;
   email: string;
   full_name: string;
   role: UserRole;

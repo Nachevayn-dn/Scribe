@@ -18,6 +18,13 @@ export function createClinic(payload: { name: string; address?: string; phone?: 
   return api.post<Clinic>("/platform/clinics", payload);
 }
 
+export function updateClinic(
+  clinicId: string,
+  payload: Partial<Pick<Clinic, "name" | "address" | "phone" | "contact_email" | "staff_email" | "is_active">>,
+) {
+  return api.patch<Clinic>(`/platform/clinics/${clinicId}`, payload);
+}
+
 export function listClinicDoctors(clinicId: string) {
   return api.get<User[]>(`/platform/clinics/${clinicId}/doctors`);
 }

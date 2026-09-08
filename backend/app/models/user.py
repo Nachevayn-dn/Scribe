@@ -58,6 +58,13 @@ class User(UUIDPkMixin, TimestampMixin, SoftDeleteMixin, Base):
 
     clinic: Mapped["Clinic"] = relationship(back_populates="users", lazy="selectin")  # noqa: F821
 
+    @property
+    def clinic_name(self) -> str:
+        """Denormalized onto UserResponse so the nav bar can show which
+        clinic a doctor belongs to without a separate round-trip — cheap
+        since `clinic` is already eager-loaded (lazy="selectin" above)."""
+        return self.clinic.name
+
 
 class ProviderAssistant(UUIDPkMixin, TimestampMixin, Base):
     """Many-to-many: an assistant may support multiple providers (doctors)."""

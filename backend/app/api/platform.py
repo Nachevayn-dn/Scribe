@@ -31,6 +31,7 @@ from app.schemas.platform import (
     PlatformAnalyticsResponse,
     PlatformClinicCreateRequest,
     PlatformClinicResponse,
+    PlatformClinicUpdateRequest,
     PlatformDoctorCreateRequest,
 )
 from app.schemas.user import UserResponse
@@ -83,6 +84,37 @@ async def list_clinics(
 ) -> list[Clinic]:
     result = await db.execute(select(Clinic).where(Clinic.deleted_at.is_(None)).order_by(Clinic.name))
     return list(result.scalars().all())
+
+
+@router.patch("/clinics/{clinic_id}", response_model=PlatformClinicResponse)
+async def update_clinic(
+    clinic_id: uuid.UUID,
+    payload: PlatformClinicUpdateRequest,
+    request: Request,
+    current_user: User = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+) -> Clinic:
+    """Edits a specific clinic's own details — independent of whichever
+    clinic the platform admin's own account happens to belong to. Fixes
+    the gap where the only place to set a clinic's email was
+    /integrations, which always acts on the logged-in user's own clinic."""
+    clinic = await _get_clinic_or_404(db, clinic_id)
+    changes = payload.model_dump(exclude_unset=True)
+    for field, value in changes.items():
+        setattr(clinic, field, value)
+    await log_action(
+        db,
+        clinic_id=clinic.id,
+        actor_user_id=current_user.id,
+        action="PLATFORM_CLINIC_UPDATED",
+        resource_type="Clinic",
+        resource_id=str(clinic.id),
+        metadata={k: str(v) for k, v in changes.items()},
+        ip_address=client_ip(request),
+    )
+    await db.commit()
+    await db.refresh(clinic)
+    return clinic
 
 
 @router.post("/clinics/{clinic_id}/doctors", response_model=UserResponse, status_code=201)

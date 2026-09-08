@@ -38,6 +38,7 @@ class UserSelfUpdateRequest(BaseModel):
 class UserResponse(BaseModel):
     id: uuid.UUID
     clinic_id: uuid.UUID
+    clinic_name: str
     email: str
     full_name: str
     role: UserRole

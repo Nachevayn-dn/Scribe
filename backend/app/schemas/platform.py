@@ -14,6 +14,21 @@ class PlatformClinicCreateRequest(BaseModel):
     phone: str | None = None
 
 
+class PlatformClinicUpdateRequest(BaseModel):
+    """Partial update — every field optional, only what's set gets changed.
+    Lets the platform admin manage a clinic's own contact/staff email
+    independently of whichever account they're logged in as (previously
+    only editable via the clinic's own /integrations page, which always
+    acts on the logged-in user's own clinic)."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    address: str | None = None
+    phone: str | None = None
+    contact_email: EmailStr | None = None
+    staff_email: EmailStr | None = None
+    is_active: bool | None = None
+
+
 class PlatformClinicResponse(BaseModel):
     id: uuid.UUID
     name: str
