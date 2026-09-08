@@ -8,3 +8,11 @@ export function getMyClinic() {
 export function updateMyClinic(payload: Partial<Pick<Clinic, "name" | "address" | "phone" | "contact_email" | "staff_email">>) {
   return api.patch<Clinic>("/clinics/me", payload);
 }
+
+export function getMyClinicGreeting() {
+  return api.get<{ greeting_text: string }>("/clinics/me/greeting");
+}
+
+export function updateMyClinicGreeting(greetingText: string) {
+  return api.patch<{ greeting_text: string }>("/clinics/me/greeting", { greeting_text: greetingText });
+}

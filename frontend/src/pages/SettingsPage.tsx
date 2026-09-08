@@ -3,21 +3,35 @@ import * as clinicsApi from "../api/clinics";
 import * as usersApi from "../api/users";
 import { useAuth } from "../auth/AuthContext";
 import { ApiError } from "../api/client";
+import { EU_LANGUAGES } from "../data/languages";
 import type { Clinic } from "../types";
 
-export function IntegrationsPage() {
+/** The doctor's (or clinic admin's) own settings: personal preferences
+ * (language, notification email) plus, for a PROVIDER/SUPER_ADMIN, the
+ * inbound agent's greeting for their own clinic. Everything else about
+ * the phone line — pickup mode, phone number, knowledge base — stays
+ * under the platform console. Also embedded as the "Integrations" tab
+ * inside the Platform Settings console, where it edits the logged-in
+ * platform admin's own account the same way. */
+export function SettingsPage() {
   const { user, refreshUser } = useAuth();
   const [clinic, setClinic] = useState<Clinic | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
 
+  const [language, setLanguage] = useState("en");
   const [notificationEmail, setNotificationEmail] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [staffEmail, setStaffEmail] = useState("");
-  const [savingEmail, setSavingEmail] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  const [greeting, setGreeting] = useState("");
+  const [savingGreeting, setSavingGreeting] = useState(false);
+  const [greetingSaved, setGreetingSaved] = useState<string | null>(null);
 
   const isAdmin = user?.role === "SUPER_ADMIN";
+  const canEditGreeting = user?.role === "PROVIDER" || user?.role === "SUPER_ADMIN";
 
   useEffect(() => {
     (async () => {
@@ -33,18 +47,33 @@ export function IntegrationsPage() {
       }
     })();
     setNotificationEmail(user?.notification_email ?? "");
-  }, [user?.notification_email]);
+    setLanguage(user?.language_preference ?? "en");
+  }, [user?.notification_email, user?.language_preference]);
 
-  async function handleSaveEmail(e: React.FormEvent) {
+  useEffect(() => {
+    if (!canEditGreeting) return;
+    (async () => {
+      try {
+        const g = await clinicsApi.getMyClinicGreeting();
+        setGreeting(g.greeting_text);
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : "Failed to load greeting");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canEditGreeting]);
+
+  async function handleSaveProfile(e: React.FormEvent) {
     e.preventDefault();
-    setSavingEmail(true);
+    setSavingProfile(true);
     setError(null);
     setSaved(null);
     try {
-      if (notificationEmail.trim()) {
-        await usersApi.updateMyPreferences({ notification_email: notificationEmail.trim() });
-        await refreshUser();
-      }
+      await usersApi.updateMyPreferences({
+        language_preference: language,
+        notification_email: notificationEmail.trim() || undefined,
+      });
+      await refreshUser();
       if (isAdmin) {
         const updated = await clinicsApi.updateMyClinic({
           contact_email: contactEmail.trim() || undefined,
@@ -54,9 +83,24 @@ export function IntegrationsPage() {
       }
       setSaved("Saved.");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to save email settings");
+      setError(err instanceof ApiError ? err.message : "Failed to save settings");
     } finally {
-      setSavingEmail(false);
+      setSavingProfile(false);
+    }
+  }
+
+  async function handleSaveGreeting(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingGreeting(true);
+    setError(null);
+    setGreetingSaved(null);
+    try {
+      await clinicsApi.updateMyClinicGreeting(greeting);
+      setGreetingSaved("Saved.");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to save greeting");
+    } finally {
+      setSavingGreeting(false);
     }
   }
 
@@ -64,19 +108,26 @@ export function IntegrationsPage() {
 
   return (
     <div className="page stack">
-      <h1 style={{ fontSize: 22 }}>Integrations</h1>
+      <h1 style={{ fontSize: 22 }}>Settings</h1>
       <p style={{ color: "var(--color-text-muted)", fontSize: 14, marginTop: -8 }}>
-        Where MedicDesk.ai sends things, and what it connects to.
+        Your preferences, and where MedicDesk.ai sends things.
       </p>
 
       {error && <div className="error-text">{error}</div>}
 
-      <form className="card stack" onSubmit={handleSaveEmail}>
-        <strong>Email</strong>
-        <p style={{ fontSize: 13, color: "var(--color-text-muted)", margin: 0 }}>
-          Used when sharing a transcript or note — see "Share via email" on a Scribe session.
-          Replies go to whichever address sent the share, so recipients can write back.
-        </p>
+      <form className="card stack" onSubmit={handleSaveProfile}>
+        <strong>Profile</strong>
+
+        <label className="stack" style={{ gap: 4, maxWidth: 300 }}>
+          <span style={{ fontSize: 13, color: "var(--color-text-muted)" }}>Language</span>
+          <select className="input" value={language} onChange={(e) => setLanguage(e.target.value)}>
+            {EU_LANGUAGES.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.label}
+              </option>
+            ))}
+          </select>
+        </label>
 
         <label className="stack" style={{ gap: 4, maxWidth: 420 }}>
           <span style={{ fontSize: 13, color: "var(--color-text-muted)" }}>
@@ -90,8 +141,9 @@ export function IntegrationsPage() {
             onChange={(e) => setNotificationEmail(e.target.value)}
           />
           <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
-            Where shares land when you check "send to me." Defaults to your login email
-            ({user?.email}) if left blank.
+            Where shares land when you check "send to me," and where a proposed appointment's
+            confirmation goes if it's sent by email. Defaults to your login email ({user?.email})
+            if left blank.
           </span>
         </label>
 
@@ -128,12 +180,36 @@ export function IntegrationsPage() {
         )}
 
         <div className="row">
-          <button className="btn btn-primary" type="submit" disabled={savingEmail}>
-            {savingEmail ? "Saving…" : "Save"}
+          <button className="btn btn-primary" type="submit" disabled={savingProfile}>
+            {savingProfile ? "Saving…" : "Save"}
           </button>
           {saved && <span style={{ fontSize: 13, color: "var(--color-text-muted)" }}>{saved}</span>}
         </div>
       </form>
+
+      {canEditGreeting && (
+        <form className="card stack" onSubmit={handleSaveGreeting}>
+          <strong>Inbound agent greeting</strong>
+          <p style={{ fontSize: 13, color: "var(--color-text-muted)", margin: 0 }}>
+            What the AI receptionist says at the start of every call to{" "}
+            {clinic ? clinic.name : "your clinic"}.
+          </p>
+          <textarea
+            className="input"
+            rows={2}
+            value={greeting}
+            onChange={(e) => setGreeting(e.target.value)}
+          />
+          <div className="row">
+            <button className="btn btn-primary" type="submit" disabled={savingGreeting}>
+              {savingGreeting ? "Saving…" : "Save"}
+            </button>
+            {greetingSaved && (
+              <span style={{ fontSize: 13, color: "var(--color-text-muted)" }}>{greetingSaved}</span>
+            )}
+          </div>
+        </form>
+      )}
 
       <div className="card stack">
         <strong>Calendar</strong>

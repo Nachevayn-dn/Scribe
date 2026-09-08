@@ -8,7 +8,7 @@ import type { Clinic } from "../../types";
  * belongs to. Each clinic keeps its own contact_email/staff_email row;
  * this is just the first screen that lets a platform admin edit them for
  * clinics other than their own (previously only possible via a doctor's
- * own /integrations page, which only ever acts on their own clinic). */
+ * own /settings page, which only ever acts on their own clinic). */
 export function ClinicDetailsTab({ clinic, onUpdated }: { clinic: Clinic; onUpdated: (c: Clinic) => void }) {
   const [name, setName] = useState(clinic.name);
   const [address, setAddress] = useState(clinic.address ?? "");

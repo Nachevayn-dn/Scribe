@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import * as platformApi from "../../api/platform";
 import { ApiError } from "../../api/client";
-import { IntegrationsPage } from "../IntegrationsPage";
+import { SettingsPage } from "../SettingsPage";
 import { ClinicDetailsTab } from "./ClinicDetailsTab";
 import { DecisionRulesTab } from "./DecisionRulesTab";
 import { KnowledgeBaseTab } from "./KnowledgeBaseTab";
@@ -9,7 +9,7 @@ import { OutboundSettingsTab } from "./OutboundSettingsTab";
 import { TelephonyTab } from "./TelephonyTab";
 import type { Clinic, ClinicDocument, ClinicDocumentType, User, UserRole } from "../../types";
 
-type Tab = "clinics" | "details" | "team" | "telephony" | "outbound" | "knowledge" | "rules" | "documents" | "integrations";
+type Tab = "clinics" | "details" | "team" | "telephony" | "outbound" | "knowledge" | "rules" | "documents" | "myAccount";
 
 const TAB_LABELS: Record<Tab, string> = {
   clinics: "Clinics",
@@ -20,7 +20,7 @@ const TAB_LABELS: Record<Tab, string> = {
   knowledge: "Knowledge base",
   rules: "Decision rules",
   documents: "Documents",
-  integrations: "Integrations",
+  myAccount: "My Account",
 };
 
 const DOC_TYPE_LABELS: Record<ClinicDocumentType, string> = {
@@ -60,7 +60,7 @@ export function PlatformSettingsPage() {
       <h1 style={{ fontSize: 22 }}>Settings</h1>
 
       <div className="row" style={{ flexWrap: "wrap" }}>
-        {(["clinics", "details", "team", "telephony", "outbound", "knowledge", "rules", "documents", "integrations"] as Tab[]).map((t) => (
+        {(["clinics", "details", "team", "telephony", "outbound", "knowledge", "rules", "documents", "myAccount"] as Tab[]).map((t) => (
           <button
             key={t}
             className="btn"
@@ -85,7 +85,7 @@ export function PlatformSettingsPage() {
         />
       )}
 
-      {tab !== "clinics" && tab !== "integrations" && (
+      {tab !== "clinics" && tab !== "myAccount" && (
         <label className="row" style={{ gap: 8 }}>
           <span style={{ fontSize: 13, color: "var(--color-text-muted)" }}>Clinic</span>
           <select
@@ -115,7 +115,7 @@ export function PlatformSettingsPage() {
       {tab === "knowledge" && selectedClinic && <KnowledgeBaseTab clinic={selectedClinic} />}
       {tab === "rules" && selectedClinic && <DecisionRulesTab clinic={selectedClinic} />}
       {tab === "documents" && selectedClinic && <DocumentsTab clinic={selectedClinic} />}
-      {tab === "integrations" && <IntegrationsPage />}
+      {tab === "myAccount" && <SettingsPage />}
     </div>
   );
 }

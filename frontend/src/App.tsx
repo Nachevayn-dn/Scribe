@@ -5,6 +5,7 @@ import { AppLayout } from "./components/layout/AppLayout";
 import { Footer } from "./components/layout/Footer";
 import { NavBar } from "./components/layout/NavBar";
 import { ComingSoonPage } from "./components/common/ComingSoonPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { SignupClinicPage } from "./pages/SignupClinicPage";
 import { PatientListPage } from "./pages/PatientListPage";
@@ -17,7 +18,6 @@ import { OutboundLogPage } from "./pages/OutboundLogPage";
 import { ClinicAdminDashboard } from "./pages/ClinicAdminDashboard";
 import { ClinicAnalyticsPage } from "./pages/ClinicAnalyticsPage";
 import { PreferencesSettingsPage } from "./pages/PreferencesSettingsPage";
-import { IntegrationsPage } from "./pages/IntegrationsPage";
 import { PlatformLayout } from "./pages/platform/PlatformLayout";
 import { PlatformPatientsPage } from "./pages/platform/PlatformPatientsPage";
 import { PlatformScribePage } from "./pages/platform/PlatformScribePage";
@@ -89,10 +89,10 @@ function AppRoutes() {
             }
           />
           <Route
-            path="/integrations"
+            path="/settings"
             element={
               <RequireAuth>
-                <IntegrationsPage />
+                <SettingsPage />
               </RequireAuth>
             }
           />

@@ -45,7 +45,7 @@ export function NavBar() {
             {(user.role === "PROVIDER" || user.role === "SUPER_ADMIN") && (
               <Link to="/preferences">Preferences</Link>
             )}
-            <Link to="/integrations">Integrations</Link>
+            <Link to="/settings">Settings</Link>
             {user.role === "SUPER_ADMIN" && <Link to="/admin">Clinic Admin</Link>}
             {user.is_platform_admin && <Link to="/platform">Platform</Link>}
           </div>

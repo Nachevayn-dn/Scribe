@@ -65,6 +65,54 @@ async def test_clinic_email_settings_admin_only(client: AsyncClient):
     assert ok.json()["staff_email"] == "staff@example.com"
 
 
+async def test_get_my_clinic_greeting_creates_default(client: AsyncClient):
+    admin = await signup_clinic(client)
+    provider = await create_user(client, admin["headers"], role="PROVIDER")
+
+    resp = await client.get("/api/v1/clinics/me/greeting", headers=provider["headers"])
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["greeting_text"]  # a non-empty default
+
+
+async def test_provider_can_update_own_clinic_greeting(client: AsyncClient):
+    admin = await signup_clinic(client)
+    provider = await create_user(client, admin["headers"], role="PROVIDER")
+
+    resp = await client.patch(
+        "/api/v1/clinics/me/greeting",
+        headers=provider["headers"],
+        json={"greeting_text": "Thanks for calling Riverside Dental!"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["greeting_text"] == "Thanks for calling Riverside Dental!"
+
+    get_resp = await client.get("/api/v1/clinics/me/greeting", headers=provider["headers"])
+    assert get_resp.json()["greeting_text"] == "Thanks for calling Riverside Dental!"
+
+
+async def test_assistant_cannot_update_clinic_greeting(client: AsyncClient):
+    admin = await signup_clinic(client)
+    assistant = await create_user(client, admin["headers"], role="ASSISTANT")
+
+    resp = await client.patch(
+        "/api/v1/clinics/me/greeting", headers=assistant["headers"], json={"greeting_text": "Hi"}
+    )
+    assert resp.status_code == 403
+
+
+async def test_greeting_update_only_affects_own_clinic(client: AsyncClient):
+    admin_a = await signup_clinic(client)
+    provider_a = await create_user(client, admin_a["headers"], role="PROVIDER")
+    admin_b = await signup_clinic(client)
+    provider_b = await create_user(client, admin_b["headers"], role="PROVIDER")
+
+    await client.patch(
+        "/api/v1/clinics/me/greeting", headers=provider_a["headers"], json={"greeting_text": "Clinic A greeting"}
+    )
+    b_resp = await client.get("/api/v1/clinics/me/greeting", headers=provider_b["headers"])
+    assert b_resp.json()["greeting_text"] != "Clinic A greeting"
+
+
 async def test_share_note_via_email(client: AsyncClient):
     admin = await signup_clinic(client)
     provider = await create_user(client, admin["headers"], role="PROVIDER")

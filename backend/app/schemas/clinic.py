@@ -21,3 +21,11 @@ class ClinicUpdateRequest(BaseModel):
     phone: str | None = None
     contact_email: EmailStr | None = None
     staff_email: EmailStr | None = None
+
+
+class ClinicGreetingResponse(BaseModel):
+    greeting_text: str
+
+
+class ClinicGreetingUpdateRequest(BaseModel):
+    greeting_text: str = Field(min_length=1, max_length=1000)

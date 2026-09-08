@@ -97,7 +97,7 @@ async def update_clinic(
     """Edits a specific clinic's own details — independent of whichever
     clinic the platform admin's own account happens to belong to. Fixes
     the gap where the only place to set a clinic's email was
-    /integrations, which always acts on the logged-in user's own clinic."""
+    /settings, which always acts on the logged-in user's own clinic."""
     clinic = await _get_clinic_or_404(db, clinic_id)
     changes = payload.model_dump(exclude_unset=True)
     for field, value in changes.items():
