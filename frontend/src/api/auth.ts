@@ -22,3 +22,11 @@ export function login(email: string, password: string) {
 export function me() {
   return api.get<CurrentUser>("/auth/me");
 }
+
+export function checkSetupToken(token: string) {
+  return api.get<{ email: string; full_name: string }>(`/auth/setup-token/${encodeURIComponent(token)}`);
+}
+
+export function setPassword(token: string, password: string) {
+  return api.post<TokenResponse>("/auth/set-password", { token, password });
+}

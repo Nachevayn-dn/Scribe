@@ -16,6 +16,7 @@ interface AuthContextValue {
   }) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
+  setPasswordViaLink: (token: string, password: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -70,6 +71,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  const setPasswordViaLink = useCallback(
+    async (token: string, password: string) => {
+      const { access_token } = await authApi.setPassword(token, password);
+      setToken(access_token);
+      await refreshMe();
+    },
+    [refreshMe],
+  );
+
   useEffect(() => {
     // "midnight" is the default and has no attribute value of its own —
     // only the alternate theme needs a data-theme flag (see global.css).
@@ -82,7 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, login, signupClinic, logout, refreshUser: refreshMe }}
+      value={{ user, loading, login, signupClinic, logout, refreshUser: refreshMe, setPasswordViaLink }}
     >
       {children}
     </AuthContext.Provider>

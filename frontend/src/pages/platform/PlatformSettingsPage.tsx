@@ -230,8 +230,9 @@ function TeamTab({ clinic }: { clinic: Clinic }) {
   const [sendEmailChecked, setSendEmailChecked] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [revealed, setRevealed] = useState<
-    { email: string; temp_password: string; emailed: boolean; email_error: string | null } | null
+    { email: string; setup_url: string; emailed: boolean; email_error: string | null } | null
   >(null);
+  const [copied, setCopied] = useState(false);
 
   async function refresh() {
     setLoading(true);
@@ -272,14 +273,25 @@ function TeamTab({ clinic }: { clinic: Clinic }) {
     setGenerating(true);
     setError(null);
     try {
-      const result = await platformApi.generateCredentials(user.id, sendEmailChecked);
+      const result = await platformApi.sendSetupLink(user.id, sendEmailChecked);
       setRevealed({ email: user.email, ...result });
+      setCopied(false);
       setGeneratingFor(null);
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to generate credentials");
+      setError(err instanceof ApiError ? err.message : "Failed to send setup link");
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function handleCopyLink() {
+    if (!revealed) return;
+    try {
+      await navigator.clipboard.writeText(revealed.setup_url);
+      setCopied(true);
+    } catch {
+      setError("Couldn't copy — select and copy the link manually");
     }
   }
 
@@ -299,19 +311,26 @@ function TeamTab({ clinic }: { clinic: Clinic }) {
         </button>
       </form>
       <p style={{ fontSize: 12, color: "var(--color-text-muted)", margin: "-4px 0 0" }}>
-        Added with no password — generate credentials below once the clinic's ready to go live.
+        Added with no password — send them a setup link below once the clinic's ready to go live;
+        they pick their own password from it.
       </p>
 
       {error && <div className="error-text">{error}</div>}
 
       {revealed && (
         <div className="card stack" style={{ borderColor: "var(--color-primary)" }}>
-          <strong>Credentials for {revealed.email}</strong>
-          <p style={{ margin: 0, fontFamily: "monospace", fontSize: 15 }}>{revealed.temp_password}</p>
+          <strong>Setup link for {revealed.email}</strong>
+          <p style={{ margin: 0, fontFamily: "monospace", fontSize: 13, wordBreak: "break-all" }}>
+            {revealed.setup_url}
+          </p>
           <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-muted)" }}>
-            Shown once — copy it now. {revealed.emailed ? "Also emailed to them." : revealed.email_error ? `Not emailed: ${revealed.email_error}` : ""}
+            Valid for 7 days.{" "}
+            {revealed.emailed ? "Emailed to them." : revealed.email_error ? `Not emailed: ${revealed.email_error} — share the link another way.` : ""}
           </p>
           <div className="row" style={{ justifyContent: "flex-end" }}>
+            <button className="btn" onClick={handleCopyLink}>
+              {copied ? "Copied ✓" : "Copy link"}
+            </button>
             <button className="btn" onClick={() => setRevealed(null)}>
               Done
             </button>
@@ -340,7 +359,7 @@ function TeamTab({ clinic }: { clinic: Clinic }) {
                 </td>
                 <td>
                   {d.password_set_at ? (
-                    <span style={{ fontSize: 13, color: "var(--color-text-muted)" }}>Generated</span>
+                    <span style={{ fontSize: 13, color: "var(--color-text-muted)" }}>Set</span>
                   ) : (
                     <span className="badge" style={{ background: "var(--color-danger)", color: "#fff" }}>
                       Pending
@@ -355,7 +374,7 @@ function TeamTab({ clinic }: { clinic: Clinic }) {
                         Email it
                       </label>
                       <button className="btn btn-primary" disabled={generating} onClick={() => handleGenerate(d)}>
-                        {generating ? "Generating…" : "Generate"}
+                        {generating ? "Sending…" : "Send"}
                       </button>
                       <button className="btn" onClick={() => setGeneratingFor(null)}>
                         Cancel
@@ -363,7 +382,7 @@ function TeamTab({ clinic }: { clinic: Clinic }) {
                     </div>
                   ) : (
                     <button className="btn" onClick={() => setGeneratingFor(d.id)}>
-                      {d.password_set_at ? "Reset credentials" : "Generate credentials"}
+                      {d.password_set_at ? "Resend setup link" : "Send setup link"}
                     </button>
                   )}
                 </td>

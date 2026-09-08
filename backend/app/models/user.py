@@ -30,6 +30,13 @@ class User(UUIDPkMixin, TimestampMixin, SoftDeleteMixin, Base):
     # hash as "cannot log in", never as "any password works."
     hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
     password_set_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # A one-time "set your password" link — see POST
+    # /platform/users/{id}/send-setup-link and POST /auth/set-password. We
+    # store a hash of the token (never the raw value, same principle as
+    # hashed_password) plus an expiry; both are cleared the moment the link
+    # is used or replaced by a newer one.
+    password_setup_token_hash: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    password_setup_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole, name="user_role"), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

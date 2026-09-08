@@ -17,6 +17,19 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class SetupTokenInfoResponse(BaseModel):
+    """Shown before the password form itself, so the page can say "Setting
+    a password for Dana Nacheva (dana@...)" rather than asking blind."""
+
+    email: str
+    full_name: str
+
+
+class SetPasswordRequest(BaseModel):
+    token: str
+    password: str = Field(min_length=8, max_length=255)
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"

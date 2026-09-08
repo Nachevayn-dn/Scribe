@@ -57,6 +57,17 @@ class GenerateCredentialsResponse(BaseModel):
     email_error: str | None = None
 
 
+class SendSetupLinkResponse(BaseModel):
+    """setup_url is always returned (not just on email failure) so the
+    admin can copy/paste and share it another way — text message, in
+    person — exactly the same fallback GenerateCredentialsResponse gives
+    for a temp password when email isn't configured or fails."""
+
+    setup_url: str
+    emailed: bool
+    email_error: str | None = None
+
+
 class ClinicDocumentResponse(BaseModel):
     id: uuid.UUID
     clinic_id: uuid.UUID

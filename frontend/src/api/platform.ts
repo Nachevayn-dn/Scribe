@@ -44,6 +44,17 @@ export function generateCredentials(userId: string, sendEmail: boolean) {
   );
 }
 
+/** The preferred way to get a team member logged in: emails them a link
+ * where they pick their own password, instead of an admin generating and
+ * relaying a temp one (generateCredentials above, kept for fallback use). */
+export function sendSetupLink(userId: string, sendEmail: boolean) {
+  return api.post<{ setup_url: string; emailed: boolean; email_error: string | null }>(
+    `/platform/users/${userId}/send-setup-link`,
+    undefined,
+    { send_email: sendEmail ? "true" : "false" },
+  );
+}
+
 export function listClinicPatients(clinicId: string) {
   return api.get<Patient[]>(`/platform/clinics/${clinicId}/patients`);
 }

@@ -13,6 +13,7 @@ from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.core.exceptions import BadRequestError, ConflictError, NotFoundError
 from app.core.security import hash_password
 from app.database import get_db
@@ -33,13 +34,15 @@ from app.schemas.platform import (
     PlatformClinicResponse,
     PlatformClinicUpdateRequest,
     PlatformDoctorCreateRequest,
+    SendSetupLinkResponse,
 )
 from app.schemas.user import UserResponse
-from app.services import document_storage
+from app.services import auth_service, document_storage
 from app.services.audit_service import log_action
 from app.services.email_service import EmailNotConfiguredError, send_share_email
 
 router = APIRouter(prefix="/platform", tags=["platform"])
+settings = get_settings()
 
 _MAX_DOCUMENT_BYTES = 20 * 1024 * 1024  # 20 MB
 _ALLOWED_DOCUMENT_MIME_TYPES = {"application/pdf", "image/png", "image/jpeg"}
@@ -254,6 +257,63 @@ async def generate_credentials(
     )
     await db.commit()
     return GenerateCredentialsResponse(temp_password=temp_password, emailed=emailed, email_error=email_error)
+
+
+@router.post("/users/{user_id}/send-setup-link", response_model=SendSetupLinkResponse)
+async def send_setup_link(
+    user_id: uuid.UUID,
+    request: Request,
+    send_email: bool = True,
+    current_user: User = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+) -> SendSetupLinkResponse:
+    """The preferred way to get a new (or locked-out) team member into the
+    platform: rather than a platform admin generating a temp password and
+    relaying it themselves (see generate_credentials above, kept for
+    scripts/fallback use), this emails the person a one-time link where
+    *they* pick their own password — see GET/POST /auth/*-token/set-password.
+    Calling this again for the same user invalidates any earlier unused
+    link (see auth_service.create_password_setup_token)."""
+    result = await db.execute(select(User).where(User.id == user_id, User.deleted_at.is_(None)))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise NotFoundError("User not found")
+
+    raw_token = await auth_service.create_password_setup_token(db, user)
+    setup_url = f"{settings.frontend_base_url.rstrip('/')}/set-password?token={raw_token}"
+
+    emailed = False
+    email_error: str | None = None
+    if send_email:
+        try:
+            send_share_email(
+                to=[user.email],
+                subject="Set up your MedicDesk.ai password",
+                body_text=(
+                    f"Hi {user.full_name},\n\n"
+                    "Your MedicDesk.ai account is ready. Set your own password here "
+                    f"(link expires in 7 days):\n\n{setup_url}\n\n"
+                    "If you didn't expect this, you can ignore it."
+                ),
+            )
+            emailed = True
+        except EmailNotConfiguredError as exc:
+            email_error = str(exc)
+        except RuntimeError as exc:
+            email_error = str(exc)
+
+    await log_action(
+        db,
+        clinic_id=user.clinic_id,
+        actor_user_id=current_user.id,
+        action="PLATFORM_SETUP_LINK_SENT",
+        resource_type="User",
+        resource_id=str(user.id),
+        metadata={"emailed": emailed},
+        ip_address=client_ip(request),
+    )
+    await db.commit()
+    return SendSetupLinkResponse(setup_url=setup_url, emailed=emailed, email_error=email_error)
 
 
 @router.post("/clinics/{clinic_id}/documents", response_model=ClinicDocumentResponse, status_code=201)

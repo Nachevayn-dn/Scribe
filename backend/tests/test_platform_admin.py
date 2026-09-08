@@ -159,6 +159,139 @@ async def test_provision_doctor_then_generate_credentials(client: AsyncClient):
     assert login_resp.status_code == 200, login_resp.text
 
 
+async def test_send_setup_link_lets_doctor_set_own_password(client: AsyncClient):
+    """The preferred flow now: instead of the admin generating and relaying
+    a temp password, the doctor gets a link and picks her own."""
+    operator = await signup_clinic(client)
+    await _make_platform_admin(operator["email"])
+
+    clinic_resp = await client.post(
+        "/api/v1/platform/clinics", headers=operator["headers"], json={"name": "Link Clinic"}
+    )
+    clinic_id = clinic_resp.json()["id"]
+
+    doctor_resp = await client.post(
+        f"/api/v1/platform/clinics/{clinic_id}/doctors",
+        headers=operator["headers"],
+        json={"email": "linkdoc@example.com", "full_name": "Dr. Link", "role": "PROVIDER"},
+    )
+    doctor_id = doctor_resp.json()["id"]
+
+    link_resp = await client.post(
+        f"/api/v1/platform/users/{doctor_id}/send-setup-link",
+        headers=operator["headers"],
+        params={"send_email": "false"},
+    )
+    assert link_resp.status_code == 200, link_resp.text
+    body = link_resp.json()
+    assert body["emailed"] is False
+    assert "/set-password?token=" in body["setup_url"]
+    token = body["setup_url"].rsplit("token=", 1)[-1]
+
+    # The link's own page can look up whose password this is before
+    # showing the form.
+    info_resp = await client.get(f"/api/v1/auth/setup-token/{token}")
+    assert info_resp.status_code == 200, info_resp.text
+    assert info_resp.json() == {"email": "linkdoc@example.com", "full_name": "Dr. Link"}
+
+    set_resp = await client.post(
+        "/api/v1/auth/set-password", json={"token": token, "password": "her-own-password-1"}
+    )
+    assert set_resp.status_code == 200, set_resp.text
+    assert "access_token" in set_resp.json()  # logged straight in
+
+    login_resp = await client.post(
+        "/api/v1/auth/login", json={"email": "linkdoc@example.com", "password": "her-own-password-1"}
+    )
+    assert login_resp.status_code == 200, login_resp.text
+
+    # Single-use — the same link cannot be replayed.
+    replay_resp = await client.post(
+        "/api/v1/auth/set-password", json={"token": token, "password": "someone-elses-password"}
+    )
+    assert replay_resp.status_code == 400
+
+
+async def test_setup_link_reports_email_failure_but_still_returns_url(client: AsyncClient):
+    """No RESEND_API_KEY in the test environment — emailing fails, but the
+    link itself is still usable (same fallback as generate-credentials)."""
+    operator = await signup_clinic(client)
+    await _make_platform_admin(operator["email"])
+    clinic_resp = await client.post(
+        "/api/v1/platform/clinics", headers=operator["headers"], json={"name": "Email Fail Clinic"}
+    )
+    clinic_id = clinic_resp.json()["id"]
+    doctor_resp = await client.post(
+        f"/api/v1/platform/clinics/{clinic_id}/doctors",
+        headers=operator["headers"],
+        json={"email": "noemail@example.com", "full_name": "Dr. NoEmail", "role": "PROVIDER"},
+    )
+    doctor_id = doctor_resp.json()["id"]
+
+    resp = await client.post(
+        f"/api/v1/platform/users/{doctor_id}/send-setup-link", headers=operator["headers"]
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["emailed"] is False
+    assert body["email_error"] is not None
+    assert body["setup_url"]
+
+
+async def test_unknown_or_garbage_setup_token_is_rejected(client: AsyncClient):
+    resp = await client.get("/api/v1/auth/setup-token/not-a-real-token")
+    assert resp.status_code == 400
+    resp2 = await client.post(
+        "/api/v1/auth/set-password", json={"token": "not-a-real-token", "password": "whatever1234"}
+    )
+    assert resp2.status_code == 400
+
+
+async def test_resending_setup_link_invalidates_the_previous_one(client: AsyncClient):
+    operator = await signup_clinic(client)
+    await _make_platform_admin(operator["email"])
+    clinic_resp = await client.post(
+        "/api/v1/platform/clinics", headers=operator["headers"], json={"name": "Resend Clinic"}
+    )
+    clinic_id = clinic_resp.json()["id"]
+    doctor_resp = await client.post(
+        f"/api/v1/platform/clinics/{clinic_id}/doctors",
+        headers=operator["headers"],
+        json={"email": "resend@example.com", "full_name": "Dr. Resend", "role": "PROVIDER"},
+    )
+    doctor_id = doctor_resp.json()["id"]
+
+    first = await client.post(
+        f"/api/v1/platform/users/{doctor_id}/send-setup-link",
+        headers=operator["headers"],
+        params={"send_email": "false"},
+    )
+    first_token = first.json()["setup_url"].rsplit("token=", 1)[-1]
+
+    second = await client.post(
+        f"/api/v1/platform/users/{doctor_id}/send-setup-link",
+        headers=operator["headers"],
+        params={"send_email": "false"},
+    )
+    second_token = second.json()["setup_url"].rsplit("token=", 1)[-1]
+    assert first_token != second_token
+
+    stale_resp = await client.get(f"/api/v1/auth/setup-token/{first_token}")
+    assert stale_resp.status_code == 400
+
+    fresh_resp = await client.get(f"/api/v1/auth/setup-token/{second_token}")
+    assert fresh_resp.status_code == 200
+
+
+async def test_send_setup_link_requires_platform_admin(client: AsyncClient):
+    non_admin = await signup_clinic(client)
+    resp = await client.post(
+        "/api/v1/platform/users/00000000-0000-0000-0000-000000000000/send-setup-link",
+        headers=non_admin["headers"],
+    )
+    assert resp.status_code == 403
+
+
 async def test_upload_and_download_clinic_document(client: AsyncClient):
     operator = await signup_clinic(client)
     await _make_platform_admin(operator["email"])

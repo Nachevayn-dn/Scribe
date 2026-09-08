@@ -8,6 +8,7 @@ import { ComingSoonPage } from "./components/common/ComingSoonPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { SignupClinicPage } from "./pages/SignupClinicPage";
+import { SetPasswordPage } from "./pages/SetPasswordPage";
 import { PatientListPage } from "./pages/PatientListPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { EncounterRecordingPage } from "./pages/EncounterRecordingPage";
@@ -35,6 +36,10 @@ function AppRoutes() {
       <Routes>
         <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
         <Route path="/signup" element={user ? <Navigate to="/" replace /> : <SignupClinicPage />} />
+        {/* Reachable while logged in too — an admin testing their own
+            invite link, or a second account's link opened in the same
+            browser, shouldn't get redirected away. */}
+        <Route path="/set-password" element={<SetPasswordPage />} />
 
         {/* Regular authenticated app — top NavBar (above) plus this new
             left sidebar (AppLayout), side by side. Nothing here replaces

@@ -66,6 +66,14 @@ class Settings(BaseSettings):
     elevenlabs_api_key: str | None = None
     elevenlabs_voice_id: str = "21m00Tcm4TlvDq8ikWAM"
 
+    # The base URL of the *frontend* app (not public_base_url above, which
+    # is the backend's own webhook URL for Twilio) — used to build the
+    # "set your password" link emailed to a newly-provisioned doctor (see
+    # POST /platform/users/{id}/send-setup-link). Defaults to the local dev
+    # server; set this to your real domain (e.g. https://medicdesk.ai) once
+    # deployed so the emailed link actually reaches the recipient.
+    frontend_base_url: str = "http://localhost:5173"
+
     # Storage
     audio_storage_dir: str = "./data/audio"
     avatar_storage_dir: str = "./data/avatars"
