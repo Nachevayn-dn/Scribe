@@ -37,6 +37,7 @@ export function NoteEditorPage({
   const [switchingTemplate, setSwitchingTemplate] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [scheduling, setScheduling] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied">("idle");
 
   const lines = note.rendered_content.split("\n");
   const readOnly = !canEdit || note.status === "SIGNED";
@@ -67,6 +68,23 @@ export function NoteEditorPage({
   async function handleApplyRevision(revisedContent: string) {
     const updated = await notesApi.replaceNoteContent(encounterId, revisedContent);
     onNoteChange(updated);
+  }
+
+  async function handleCopyForPms() {
+    try {
+      await navigator.clipboard.writeText(note.rendered_content);
+    } catch {
+      // Clipboard permission can be denied by the browser — the custom
+      // event below still fires either way, so the extension (if
+      // installed) can still pick the text up and offer its own paste.
+    }
+    // Lets the optional MedicDesk Chrome extension's content script (see
+    // /extension) grab the note text too, so its "paste into PMS" action
+    // has something to paste even if the page didn't have clipboard
+    // permission. No-ops harmlessly if the extension isn't installed.
+    window.postMessage({ source: "medicdesk", type: "NOTE_COPIED", text: note.rendered_content }, "*");
+    setCopyStatus("copied");
+    setTimeout(() => setCopyStatus("idle"), 2000);
   }
 
   async function handleSign() {
@@ -105,6 +123,9 @@ export function NoteEditorPage({
             </button>
             <button className="btn" onClick={() => setSharing(true)}>
               Share via email
+            </button>
+            <button className="btn" onClick={handleCopyForPms} title="Copies the note so you can paste it into your PMS">
+              {copyStatus === "copied" ? "Copied ✓" : "Copy for PMS"}
             </button>
           </div>
         )}
