@@ -34,12 +34,25 @@ services:
       CORS_ORIGINS: '["http://localhost:5173"]'
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_WORKSPACE_ID: ${ANTHROPIC_WORKSPACE_ID:-}
       WHISPER_MODEL: ${WHISPER_MODEL:-whisper-1}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5}
       AUDIO_STORAGE_DIR: /app/data/audio
       AVATAR_STORAGE_DIR: /app/data/avatars
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-MedicDesk.ai <onboarding@resend.dev>}
+      # Inbound/outbound phone agents (console.twilio.com) — optional.
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_WHATSAPP_FROM: ${TWILIO_WHATSAPP_FROM:-whatsapp:+14155238886}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
+      # Natural inbound-agent voice (elevenlabs.io) — optional.
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      ELEVENLABS_VOICE_ID: ${ELEVENLABS_VOICE_ID:-21m00Tcm4TlvDq8ikWAM}
+      # The frontend's own URL, for links emailed to users (e.g. "set your
+      # password"). In prod this is overridden to https://$DOMAIN — see
+      # docker-compose.prod.yml.
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:5173}
     ports:
       - "8000:8000"
     volumes:

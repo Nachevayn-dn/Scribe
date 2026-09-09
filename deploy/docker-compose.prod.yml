@@ -15,6 +15,12 @@ services:
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
       CORS_ORIGINS: '["https://${DOMAIN}"]'
+      # Both derived from DOMAIN — no need to set them separately in
+      # .env.prod. PUBLIC_BASE_URL is where Twilio calls back to;
+      # FRONTEND_BASE_URL is what gets embedded in emailed links (e.g. the
+      # doctor "set your password" link).
+      PUBLIC_BASE_URL: https://${DOMAIN}
+      FRONTEND_BASE_URL: https://${DOMAIN}
     volumes: !override
       - audio_data:/app/data/audio
       - avatar_data:/app/data/avatars
