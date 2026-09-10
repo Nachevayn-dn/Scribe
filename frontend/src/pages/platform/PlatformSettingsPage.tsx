@@ -132,43 +132,116 @@ function ClinicsTab({
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
+  const [doctorName, setDoctorName] = useState("");
+  const [doctorEmail, setDoctorEmail] = useState("");
+  const [doctorRole, setDoctorRole] = useState<Extract<UserRole, "PROVIDER" | "ASSISTANT">>("PROVIDER");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [revealed, setRevealed] = useState<
+    { clinicName: string; doctorEmail: string; setup_url: string; emailed: boolean; email_error: string | null } | null
+  >(null);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
     setSaving(true);
     setError(null);
+    setRevealed(null);
     try {
-      await platformApi.createClinic({
+      const clinic = await platformApi.createClinic({
         name: name.trim(),
         address: address.trim() || undefined,
         phone: phone.trim() || undefined,
       });
+
+      // Onboarding a clinic without a doctor yet is still valid (e.g.
+      // attaching contracts first) — only provision + send a link when
+      // both doctor fields are filled in.
+      if (doctorName.trim() && doctorEmail.trim()) {
+        const doctor = await platformApi.provisionDoctor(clinic.id, {
+          email: doctorEmail.trim(),
+          full_name: doctorName.trim(),
+          role: doctorRole,
+        });
+        const link = await platformApi.sendSetupLink(doctor.id, true);
+        setRevealed({ clinicName: clinic.name, doctorEmail: doctor.email, ...link });
+        setCopied(false);
+      }
+
       setName("");
       setAddress("");
       setPhone("");
+      setDoctorName("");
+      setDoctorEmail("");
+      setDoctorRole("PROVIDER");
       onCreated();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to create clinic");
+      setError(err instanceof ApiError ? err.message : "Failed to create clinic and doctor");
     } finally {
       setSaving(false);
     }
   }
 
+  async function handleCopyLink() {
+    if (!revealed) return;
+    try {
+      await navigator.clipboard.writeText(revealed.setup_url);
+      setCopied(true);
+    } catch {
+      setError("Couldn't copy — select and copy the link manually");
+    }
+  }
+
   return (
     <div className="stack">
-      <form className="card row" onSubmit={handleCreate} style={{ flexWrap: "wrap" }}>
-        <input className="input" placeholder="Clinic name" value={name} onChange={(e) => setName(e.target.value)} style={{ width: 220 }} required />
-        <input className="input" placeholder="Address (optional)" value={address} onChange={(e) => setAddress(e.target.value)} style={{ width: 220 }} />
-        <input className="input" placeholder="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} style={{ width: 160 }} />
-        <button className="btn btn-primary" type="submit" disabled={saving}>
-          {saving ? "Creating…" : "+ New clinic"}
-        </button>
+      <form className="card stack" onSubmit={handleCreate}>
+        <strong style={{ fontSize: 13 }}>New clinic</strong>
+        <div className="row" style={{ flexWrap: "wrap" }}>
+          <input className="input" placeholder="Clinic name" value={name} onChange={(e) => setName(e.target.value)} style={{ width: 220 }} required />
+          <input className="input" placeholder="Address (optional)" value={address} onChange={(e) => setAddress(e.target.value)} style={{ width: 220 }} />
+          <input className="input" placeholder="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} style={{ width: 160 }} />
+        </div>
+        <strong style={{ fontSize: 13 }}>First doctor (optional — leave blank to just create the clinic)</strong>
+        <div className="row" style={{ flexWrap: "wrap" }}>
+          <input className="input" placeholder="Doctor's full name" value={doctorName} onChange={(e) => setDoctorName(e.target.value)} style={{ width: 200 }} />
+          <input className="input" type="email" placeholder="Doctor's email" value={doctorEmail} onChange={(e) => setDoctorEmail(e.target.value)} style={{ width: 220 }} />
+          <select className="input" value={doctorRole} onChange={(e) => setDoctorRole(e.target.value as typeof doctorRole)} style={{ width: 160 }}>
+            <option value="PROVIDER">Provider (doctor)</option>
+            <option value="ASSISTANT">Assistant</option>
+          </select>
+        </div>
+        <div className="row" style={{ justifyContent: "flex-end" }}>
+          <button className="btn btn-primary" type="submit" disabled={saving}>
+            {saving ? "Creating…" : doctorName.trim() && doctorEmail.trim() ? "+ New clinic & send setup link" : "+ New clinic"}
+          </button>
+        </div>
       </form>
 
       {error && <div className="error-text">{error}</div>}
+
+      {revealed && (
+        <div className="card stack" style={{ borderColor: "var(--color-primary)" }}>
+          <strong>
+            {revealed.clinicName} created — setup link for {revealed.doctorEmail}
+          </strong>
+          <p style={{ margin: 0, fontFamily: "monospace", fontSize: 13, wordBreak: "break-all" }}>
+            {revealed.setup_url}
+          </p>
+          <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-muted)" }}>
+            Valid for 7 days.{" "}
+            {revealed.emailed ? "Emailed to them." : revealed.email_error ? `Not emailed: ${revealed.email_error} — share the link another way.` : ""}
+          </p>
+          <div className="row" style={{ justifyContent: "flex-end" }}>
+            <button className="btn" onClick={handleCopyLink}>
+              {copied ? "Copied ✓" : "Copy link"}
+            </button>
+            <button className="btn" onClick={() => setRevealed(null)}>
+              Done
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <table>
