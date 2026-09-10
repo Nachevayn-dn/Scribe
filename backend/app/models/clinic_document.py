@@ -1,7 +1,12 @@
 """Documents a platform admin attaches to a clinic during onboarding — the
 signed contract, the order form, and (potentially several) consent-form
 templates. English only for now; doc_type stays generic so other document
-kinds can be added later without a new table."""
+kinds can be added later without a new table.
+
+provider_id is nullable: null means a clinic-wide document (a contract, an
+order form); set means it belongs to one specific doctor (most commonly a
+signed CONSENT_FORM granting the data-retention override — see
+User.retain_all_sessions)."""
 import enum
 import uuid
 from datetime import datetime
@@ -24,6 +29,9 @@ class ClinicDocument(UUIDPkMixin, Base):
 
     clinic_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("clinics.id"), nullable=False, index=True
+    )
+    provider_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True
     )
     doc_type: Mapped[ClinicDocumentType] = mapped_column(
         Enum(ClinicDocumentType, name="clinic_document_type"), nullable=False

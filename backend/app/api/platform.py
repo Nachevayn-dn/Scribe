@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.core.exceptions import BadRequestError, ConflictError, NotFoundError
+from app.core.exceptions import BadRequestError, ConflictError, ForbiddenError, NotFoundError
 from app.core.security import hash_password
 from app.database import get_db
 from app.deps import client_ip, require_platform_admin
@@ -34,6 +34,7 @@ from app.schemas.platform import (
     PlatformClinicResponse,
     PlatformClinicUpdateRequest,
     PlatformDoctorCreateRequest,
+    RetentionUpdateRequest,
     SendSetupLinkResponse,
 )
 from app.schemas.user import UserResponse
@@ -316,16 +317,74 @@ async def send_setup_link(
     return SendSetupLinkResponse(setup_url=setup_url, emailed=emailed, email_error=email_error)
 
 
+@router.patch("/users/{user_id}/retention", response_model=UserResponse)
+async def update_retention(
+    user_id: uuid.UUID,
+    payload: RetentionUpdateRequest,
+    request: Request,
+    current_user: User = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """Flips a doctor's data-retention override (see
+    User.retain_all_sessions and services/retention_service.py). Turning it
+    ON requires a signed CONSENT_FORM already uploaded for this doctor
+    (upload_clinic_document below, scoped with provider_id) — enforced here,
+    not at the DB layer, same as every other platform-admin gate. Turning it
+    back OFF never needs one; the encounter's normal retention window simply
+    starts applying again from here on."""
+    result = await db.execute(select(User).where(User.id == user_id, User.deleted_at.is_(None)))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise NotFoundError("User not found")
+
+    if payload.retain_all_sessions and not user.retain_all_sessions:
+        consent_on_file = await db.execute(
+            select(ClinicDocument).where(
+                ClinicDocument.provider_id == user_id,
+                ClinicDocument.doc_type == ClinicDocumentType.CONSENT_FORM,
+            )
+        )
+        if consent_on_file.scalar_one_or_none() is None:
+            raise ForbiddenError(
+                "Upload a signed consent form for this doctor (Documents tab) before enabling retain-all"
+            )
+
+    user.retain_all_sessions = payload.retain_all_sessions
+    await log_action(
+        db,
+        clinic_id=user.clinic_id,
+        actor_user_id=current_user.id,
+        action="PLATFORM_RETENTION_UPDATED",
+        resource_type="User",
+        resource_id=str(user.id),
+        metadata={"retain_all_sessions": payload.retain_all_sessions},
+        ip_address=client_ip(request),
+    )
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
 @router.post("/clinics/{clinic_id}/documents", response_model=ClinicDocumentResponse, status_code=201)
 async def upload_clinic_document(
     clinic_id: uuid.UUID,
     request: Request,
     doc_type: ClinicDocumentType = Form(...),
+    provider_id: uuid.UUID | None = Form(None),
     file: UploadFile = File(...),
     current_user: User = Depends(require_platform_admin),
     db: AsyncSession = Depends(get_db),
 ) -> ClinicDocument:
     await _get_clinic_or_404(db, clinic_id)
+    if provider_id is not None:
+        provider = await db.execute(
+            select(User).where(
+                User.id == provider_id, User.clinic_id == clinic_id, User.deleted_at.is_(None)
+            )
+        )
+        if provider.scalar_one_or_none() is None:
+            raise NotFoundError("Doctor not found in this clinic")
+
     content = await file.read()
     if len(content) > _MAX_DOCUMENT_BYTES:
         raise BadRequestError("File must be 20 MB or smaller")
@@ -336,6 +395,7 @@ async def upload_clinic_document(
     storage_path = await document_storage.save_document(clinic_id, content, file.filename or "document")
     document = ClinicDocument(
         clinic_id=clinic_id,
+        provider_id=provider_id,
         doc_type=doc_type,
         original_filename=file.filename or "document",
         storage_path=storage_path,
@@ -351,7 +411,7 @@ async def upload_clinic_document(
         action="PLATFORM_DOCUMENT_UPLOADED",
         resource_type="ClinicDocument",
         resource_id=str(document.id),
-        metadata={"doc_type": doc_type.value},
+        metadata={"doc_type": doc_type.value, "provider_id": str(provider_id) if provider_id else None},
         ip_address=client_ip(request),
     )
     await db.commit()

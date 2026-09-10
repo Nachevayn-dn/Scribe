@@ -81,6 +81,13 @@ class Settings(BaseSettings):
     # from a public URL (see services/document_storage.py).
     document_storage_dir: str = "./data/documents"
 
+    # Data retention: how long an encounter's audio, transcript and note are
+    # kept before services/retention_service.py auto-purges them, unless the
+    # provider has a signed consent on file (User.retain_all_sessions). See
+    # the site FAQ copy this backs: "kept for 14 days ... deleted after, if
+    # not requested otherwise."
+    retention_days: int = 14
+
 
 @lru_cache
 def get_settings() -> Settings:

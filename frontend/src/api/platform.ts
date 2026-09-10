@@ -67,11 +67,24 @@ export function listClinicDocuments(clinicId: string) {
   return api.get<ClinicDocument[]>(`/platform/clinics/${clinicId}/documents`);
 }
 
-export function uploadClinicDocument(clinicId: string, docType: ClinicDocumentType, file: File) {
+export function uploadClinicDocument(
+  clinicId: string,
+  docType: ClinicDocumentType,
+  file: File,
+  providerId?: string,
+) {
   const form = new FormData();
   form.append("doc_type", docType);
+  if (providerId) form.append("provider_id", providerId);
   form.append("file", file);
   return api.postForm<ClinicDocument>(`/platform/clinics/${clinicId}/documents`, form);
+}
+
+/** Flips a doctor's data-retention override. The backend refuses to turn it
+ * on unless a signed CONSENT_FORM document is already on file for them —
+ * surface that ApiError message to the admin rather than retrying. */
+export function updateRetention(userId: string, retainAllSessions: boolean) {
+  return api.patch<User>(`/platform/users/${userId}/retention`, { retain_all_sessions: retainAllSessions });
 }
 
 /** The download endpoint requires the same bearer auth as every other API

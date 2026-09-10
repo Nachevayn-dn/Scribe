@@ -291,6 +291,7 @@ function ClinicsTab({
 
 function TeamTab({ clinic }: { clinic: Clinic }) {
   const [doctors, setDoctors] = useState<User[]>([]);
+  const [documents, setDocuments] = useState<ClinicDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -306,15 +307,38 @@ function TeamTab({ clinic }: { clinic: Clinic }) {
     { email: string; setup_url: string; emailed: boolean; email_error: string | null } | null
   >(null);
   const [copied, setCopied] = useState(false);
+  const [retentionSaving, setRetentionSaving] = useState<string | null>(null);
 
   async function refresh() {
     setLoading(true);
     try {
-      setDoctors(await platformApi.listClinicDoctors(clinic.id));
+      const [nextDoctors, nextDocuments] = await Promise.all([
+        platformApi.listClinicDoctors(clinic.id),
+        platformApi.listClinicDocuments(clinic.id),
+      ]);
+      setDoctors(nextDoctors);
+      setDocuments(nextDocuments);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load team");
     } finally {
       setLoading(false);
+    }
+  }
+
+  function hasSignedConsent(doctorId: string) {
+    return documents.some((d) => d.provider_id === doctorId && d.doc_type === "CONSENT_FORM");
+  }
+
+  async function handleToggleRetention(doctor: User) {
+    setRetentionSaving(doctor.id);
+    setError(null);
+    try {
+      await platformApi.updateRetention(doctor.id, !doctor.retain_all_sessions);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to update retention");
+    } finally {
+      setRetentionSaving(null);
     }
   }
 
@@ -419,6 +443,7 @@ function TeamTab({ clinic }: { clinic: Clinic }) {
               <th>Email</th>
               <th>Role</th>
               <th>Credentials</th>
+              <th>Retention</th>
               <th></th>
             </tr>
           </thead>
@@ -438,6 +463,29 @@ function TeamTab({ clinic }: { clinic: Clinic }) {
                       Pending
                     </span>
                   )}
+                </td>
+                <td>
+                  <div className="row" style={{ gap: 6, alignItems: "center" }}>
+                    <span
+                      className="badge"
+                      title={d.retain_all_sessions ? "Sessions kept indefinitely" : "Sessions auto-delete after 14 days"}
+                    >
+                      {d.retain_all_sessions ? "Retains all" : "14-day auto-delete"}
+                    </span>
+                    <button
+                      className="btn"
+                      style={{ fontSize: 12, padding: "2px 8px" }}
+                      disabled={retentionSaving === d.id || (!d.retain_all_sessions && !hasSignedConsent(d.id))}
+                      title={
+                        !d.retain_all_sessions && !hasSignedConsent(d.id)
+                          ? "Upload a signed consent form for this doctor in the Documents tab first"
+                          : undefined
+                      }
+                      onClick={() => handleToggleRetention(d)}
+                    >
+                      {retentionSaving === d.id ? "Saving…" : d.retain_all_sessions ? "Switch to 14-day" : "Enable retain-all"}
+                    </button>
+                  </div>
                 </td>
                 <td>
                   {generatingFor === d.id ? (
@@ -463,7 +511,7 @@ function TeamTab({ clinic }: { clinic: Clinic }) {
             ))}
             {doctors.length === 0 && (
               <tr>
-                <td colSpan={5} style={{ color: "var(--color-text-muted)" }}>
+                <td colSpan={6} style={{ color: "var(--color-text-muted)" }}>
                   No team members yet for {clinic.name}.
                 </td>
               </tr>
@@ -477,15 +525,22 @@ function TeamTab({ clinic }: { clinic: Clinic }) {
 
 function DocumentsTab({ clinic }: { clinic: Clinic }) {
   const [documents, setDocuments] = useState<ClinicDocument[]>([]);
+  const [doctors, setDoctors] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [docType, setDocType] = useState<ClinicDocumentType>("CONTRACT");
+  const [providerId, setProviderId] = useState<string>("");
   const [uploading, setUploading] = useState(false);
 
   async function refresh() {
     setLoading(true);
     try {
-      setDocuments(await platformApi.listClinicDocuments(clinic.id));
+      const [nextDocuments, nextDoctors] = await Promise.all([
+        platformApi.listClinicDocuments(clinic.id),
+        platformApi.listClinicDoctors(clinic.id),
+      ]);
+      setDocuments(nextDocuments);
+      setDoctors(nextDoctors);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load documents");
     } finally {
@@ -498,6 +553,11 @@ function DocumentsTab({ clinic }: { clinic: Clinic }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clinic.id]);
 
+  function doctorName(id: string | null) {
+    if (!id) return "Clinic-wide";
+    return doctors.find((d) => d.id === id)?.full_name ?? "Former team member";
+  }
+
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -505,7 +565,7 @@ function DocumentsTab({ clinic }: { clinic: Clinic }) {
     setUploading(true);
     setError(null);
     try {
-      await platformApi.uploadClinicDocument(clinic.id, docType, file);
+      await platformApi.uploadClinicDocument(clinic.id, docType, file, providerId || undefined);
       await refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to upload document");
@@ -532,12 +592,24 @@ function DocumentsTab({ clinic }: { clinic: Clinic }) {
           <option value="ORDER_FORM">Order form</option>
           <option value="CONSENT_FORM">Consent form</option>
         </select>
+        <select className="input" value={providerId} onChange={(e) => setProviderId(e.target.value)} style={{ width: 200 }}>
+          <option value="">Clinic-wide</option>
+          {doctors.map((d) => (
+            <option key={d.id} value={d.id}>
+              For {d.full_name}
+            </option>
+          ))}
+        </select>
         <label className="btn btn-primary" style={{ cursor: "pointer" }}>
           {uploading ? "Uploading…" : "Upload PDF"}
           <input type="file" accept="application/pdf,image/png,image/jpeg" onChange={handleUpload} disabled={uploading} style={{ display: "none" }} />
         </label>
         <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>English only, for now.</span>
       </div>
+      <p style={{ fontSize: 12, color: "var(--color-text-muted)", margin: "-4px 0 0" }}>
+        A signed Consent form scoped to a specific doctor is what unlocks that doctor's "retain all
+        sessions" toggle in the Team tab, instead of the platform's normal 14-day auto-delete.
+      </p>
 
       {error && <div className="error-text">{error}</div>}
 
@@ -546,6 +618,7 @@ function DocumentsTab({ clinic }: { clinic: Clinic }) {
           <thead>
             <tr>
               <th>Type</th>
+              <th>For</th>
               <th>File</th>
               <th>Uploaded</th>
               <th></th>
@@ -555,6 +628,7 @@ function DocumentsTab({ clinic }: { clinic: Clinic }) {
             {documents.map((d) => (
               <tr key={d.id}>
                 <td>{DOC_TYPE_LABELS[d.doc_type]}</td>
+                <td>{doctorName(d.provider_id)}</td>
                 <td>{d.original_filename}</td>
                 <td>{new Date(d.created_at).toLocaleDateString()}</td>
                 <td>
@@ -566,7 +640,7 @@ function DocumentsTab({ clinic }: { clinic: Clinic }) {
             ))}
             {documents.length === 0 && (
               <tr>
-                <td colSpan={4} style={{ color: "var(--color-text-muted)" }}>
+                <td colSpan={5} style={{ color: "var(--color-text-muted)" }}>
                   No documents uploaded yet for {clinic.name}.
                 </td>
               </tr>

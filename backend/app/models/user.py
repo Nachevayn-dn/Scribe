@@ -62,6 +62,14 @@ class User(UUIDPkMixin, TimestampMixin, SoftDeleteMixin, Base):
     # gates the platform console (see deps.require_platform_admin). There's
     # no self-serve way to become one; it's flagged directly in the DB.
     is_platform_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Data-retention override for this doctor's own sessions. Default False
+    # means the platform's normal policy applies — an encounter's audio,
+    # transcript and note are auto-purged after settings.retention_days (see
+    # services/retention_service.py) unless this is True. A platform admin
+    # only flips this to True once a signed retention-consent document is on
+    # file for the doctor (see ClinicDocument.provider_id) — enforced in the
+    # API, not at the DB layer, same pattern as other platform-admin gates.
+    retain_all_sessions: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     clinic: Mapped["Clinic"] = relationship(back_populates="users", lazy="selectin")  # noqa: F821
 

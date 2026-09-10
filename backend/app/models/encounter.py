@@ -63,6 +63,16 @@ class Encounter(UUIDPkMixin, TimestampMixin, Base):
         DateTime(timezone=True), nullable=False, server_default="now()"
     )
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Set once services/retention_service.py has purged this encounter's
+    # audio, transcript and note (settings.retention_days after started_at,
+    # unless the provider has User.retain_all_sessions set). The Encounter
+    # row itself, and its patient/provider/date links, are kept indefinitely
+    # for analytics and audit history — only the recording and clinical
+    # content are deleted. Null means untouched; idempotency guard so a
+    # crashed sweep never re-purges or double-logs the same encounter.
+    content_purged_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     patient: Mapped["Patient"] = relationship(lazy="selectin")  # noqa: F821
     provider: Mapped["User"] = relationship(foreign_keys=[provider_id], lazy="selectin")  # noqa: F821

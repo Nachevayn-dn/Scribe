@@ -39,3 +39,11 @@ async def save_audio(encounter_id: uuid.UUID, content: bytes, mime_type: str) ->
 
 def read_audio(storage_path: str) -> bytes:
     return Path(storage_path).read_bytes()
+
+
+def delete_audio(storage_path: str) -> None:
+    """Removes one audio file from disk. Used by the retention purge (see
+    services/retention_service.py) — missing_ok so a sweep already
+    interrupted mid-way (file deleted, row not yet updated) is safe to
+    re-run rather than crashing on retry."""
+    Path(storage_path).unlink(missing_ok=True)

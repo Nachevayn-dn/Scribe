@@ -71,6 +71,9 @@ class SendSetupLinkResponse(BaseModel):
 class ClinicDocumentResponse(BaseModel):
     id: uuid.UUID
     clinic_id: uuid.UUID
+    # Null = clinic-wide document; set = belongs to this one doctor (most
+    # commonly a signed CONSENT_FORM granting the retention override).
+    provider_id: uuid.UUID | None
     doc_type: ClinicDocumentType
     original_filename: str
     mime_type: str
@@ -78,6 +81,15 @@ class ClinicDocumentResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class RetentionUpdateRequest(BaseModel):
+    """Toggles a doctor's data-retention override. Setting True is refused
+    server-side unless a signed CONSENT_FORM document is already on file for
+    that doctor (see PATCH /platform/users/{id}/retention) — turning it back
+    False never requires one."""
+
+    retain_all_sessions: bool
 
 
 class PlatformAnalyticsResponse(BaseModel):

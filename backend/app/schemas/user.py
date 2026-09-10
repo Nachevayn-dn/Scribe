@@ -52,5 +52,7 @@ class UserResponse(BaseModel):
     # Null means credentials haven't been generated yet — see
     # POST /platform/users/{id}/generate-credentials.
     password_set_at: datetime | None
+    # Data-retention override — see PATCH /platform/users/{id}/retention.
+    retain_all_sessions: bool
 
     model_config = {"from_attributes": True}

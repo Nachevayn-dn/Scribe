@@ -42,6 +42,11 @@ export interface User {
   is_platform_admin: boolean;
   // Null means credentials haven't been generated for this account yet.
   password_set_at: string | null;
+  // Data-retention override — see PATCH /platform/users/{id}/retention.
+  // False (default): this doctor's sessions auto-delete after the platform's
+  // retention window. True: sessions are kept indefinitely, on file with a
+  // signed consent document (see ClinicDocument.provider_id).
+  retain_all_sessions: boolean;
 }
 
 export type ClinicDocumentType = "CONTRACT" | "ORDER_FORM" | "CONSENT_FORM";
@@ -49,6 +54,8 @@ export type ClinicDocumentType = "CONTRACT" | "ORDER_FORM" | "CONSENT_FORM";
 export interface ClinicDocument {
   id: string;
   clinic_id: string;
+  // Null = clinic-wide document; set = belongs to one specific doctor.
+  provider_id: string | null;
   doc_type: ClinicDocumentType;
   original_filename: string;
   mime_type: string;
