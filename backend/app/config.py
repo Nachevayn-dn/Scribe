@@ -81,12 +81,16 @@ class Settings(BaseSettings):
     # from a public URL (see services/document_storage.py).
     document_storage_dir: str = "./data/documents"
 
-    # Data retention: how long an encounter's audio, transcript and note are
-    # kept before services/retention_service.py auto-purges them, unless the
-    # provider has a signed consent on file (User.retain_all_sessions). See
-    # the site FAQ copy this backs: "kept for 14 days ... deleted after, if
-    # not requested otherwise."
-    retention_days: int = 14
+    # Data retention (see services/retention_service.py) — two stages:
+    # audio is deleted and the session archived after retention_audio_days
+    # (skippable per-doctor via User.retain_all_sessions, once a signed
+    # consent is on file); the transcript and clinical note — the actual
+    # medical record — are kept until retention_record_days regardless of
+    # that override, then purged too. ~7 years (2,555 days) is a common
+    # minimum medical-record-retention period; confirm the exact figure for
+    # your jurisdiction before relying on it.
+    retention_audio_days: int = 14
+    retention_record_days: int = 2555
 
 
 @lru_cache

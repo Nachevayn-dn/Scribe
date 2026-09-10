@@ -1,6 +1,8 @@
 """Data retention: the platform-admin consent gate on User.retain_all_sessions
 (PATCH /platform/users/{id}/retention), provider-scoped document uploads,
-and services/retention_service.py's purge sweep."""
+the two-stage retention sweep in services/retention_service.py (archive at
+retention_audio_days, full purge at retention_record_days), and the
+GET /encounters?archived filter."""
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from unittest.mock import patch
@@ -10,14 +12,13 @@ from sqlalchemy import select
 
 from app.config import get_settings
 from app.models.audit_log import AuditLog
-from app.models.clinical_note import ClinicalNote, NoteEntity
+from app.models.clinical_note import ClinicalNote, EntityType, NoteEntity
 from app.models.encounter import AudioFile, Encounter
 from app.models.patient import Patient
 from app.models.transcript import Transcript, TranscriptEntity
-from app.models.clinical_note import EntityType
 from app.models.user import User, UserRole
 from app.services import retention_service
-from tests.conftest import TestSessionLocal, signup_clinic
+from tests.conftest import TestSessionLocal, create_user, signup_clinic
 
 settings = get_settings()
 
@@ -129,7 +130,7 @@ async def test_document_upload_with_no_provider_is_clinic_wide(client: AsyncClie
     assert resp.json()["provider_id"] is None
 
 
-# --- Purge sweep -------------------------------------------------------------
+# --- Two-stage retention sweep ----------------------------------------------
 
 
 async def _make_provider(clinic_id: uuid.UUID, *, retain_all_sessions: bool = False) -> uuid.UUID:
@@ -163,7 +164,7 @@ async def _make_full_encounter(
     clinic_id: uuid.UUID, patient_id: uuid.UUID, provider_id: uuid.UUID, started_at: datetime
 ) -> uuid.UUID:
     """An encounter with an audio file, a transcript (+entity) and a signed
-    note (+entity) attached — everything the purge sweep should remove."""
+    note (+entity) attached — everything the retention sweep can touch."""
     async with TestSessionLocal() as session:
         encounter = Encounter(
             clinic_id=clinic_id,
@@ -201,33 +202,127 @@ async def _make_full_encounter(
         return encounter.id
 
 
-async def test_purge_sweep_removes_content_and_stamps_encounter(client: AsyncClient):
+def _days_ago(days: int) -> datetime:
+    return datetime.now(timezone.utc) - timedelta(days=days)
+
+
+async def test_archive_stage_removes_audio_only_and_stamps_archived_at(client: AsyncClient):
+    """Past the audio-retention window: audio is gone, transcript/note stay
+    — they're the medical record, kept until the 7-year floor."""
     operator = await signup_clinic(client)
     await _make_platform_admin(operator["email"])
-    clinic_id_str = await _new_clinic_id(client, operator["headers"])
-    clinic_id = uuid.UUID(clinic_id_str)
+    clinic_id = uuid.UUID(await _new_clinic_id(client, operator["headers"]))
     provider_id = await _make_provider(clinic_id)
     patient_id = await _make_patient(clinic_id)
-    old_enough = datetime.now(timezone.utc) - timedelta(days=settings.retention_days + 1)
-    encounter_id = await _make_full_encounter(clinic_id, patient_id, provider_id, old_enough)
+    encounter_id = await _make_full_encounter(
+        clinic_id, patient_id, provider_id, _days_ago(settings.retention_audio_days + 1)
+    )
 
     with patch("app.services.retention_service.AsyncSessionLocal", TestSessionLocal):
-        purged = await retention_service.run_retention_sweep()
-    assert purged == 1
+        result = await retention_service.run_retention_sweep()
+    assert result.archived == 1
+    assert result.purged == 0
 
     async with TestSessionLocal() as session:
         encounter = (await session.execute(select(Encounter).where(Encounter.id == encounter_id))).scalar_one()
-        assert encounter.content_purged_at is not None
+        assert encounter.archived_at is not None
+        assert encounter.content_purged_at is None
 
         assert (
             await session.execute(select(AudioFile).where(AudioFile.encounter_id == encounter_id))
         ).scalar_one_or_none() is None
         assert (
             await session.execute(select(Transcript).where(Transcript.encounter_id == encounter_id))
-        ).scalar_one_or_none() is None
+        ).scalar_one_or_none() is not None
         assert (
             await session.execute(select(ClinicalNote).where(ClinicalNote.encounter_id == encounter_id))
-        ).scalar_one_or_none() is None
+        ).scalar_one_or_none() is not None
+
+        audit = (
+            await session.execute(
+                select(AuditLog).where(
+                    AuditLog.action == "ENCOUNTER_ARCHIVED", AuditLog.resource_id == str(encounter_id)
+                )
+            )
+        ).scalar_one_or_none()
+        assert audit is not None
+
+    # Idempotent: a second sweep finds nothing left to archive.
+    with patch("app.services.retention_service.AsyncSessionLocal", TestSessionLocal):
+        result_again = await retention_service.run_retention_sweep()
+    assert result_again.archived == 0
+
+
+async def test_archive_stage_skips_encounters_within_the_audio_window(client: AsyncClient):
+    operator = await signup_clinic(client)
+    await _make_platform_admin(operator["email"])
+    clinic_id = uuid.UUID(await _new_clinic_id(client, operator["headers"]))
+    provider_id = await _make_provider(clinic_id)
+    patient_id = await _make_patient(clinic_id)
+    encounter_id = await _make_full_encounter(clinic_id, patient_id, provider_id, _days_ago(1))
+
+    with patch("app.services.retention_service.AsyncSessionLocal", TestSessionLocal):
+        result = await retention_service.run_retention_sweep()
+    assert result.archived == 0
+
+    async with TestSessionLocal() as session:
+        encounter = (await session.execute(select(Encounter).where(Encounter.id == encounter_id))).scalar_one()
+        assert encounter.archived_at is None
+        assert (
+            await session.execute(select(AudioFile).where(AudioFile.encounter_id == encounter_id))
+        ).scalar_one_or_none() is not None
+
+
+async def test_archive_stage_skips_providers_with_retain_all_sessions(client: AsyncClient):
+    operator = await signup_clinic(client)
+    await _make_platform_admin(operator["email"])
+    clinic_id = uuid.UUID(await _new_clinic_id(client, operator["headers"]))
+    provider_id = await _make_provider(clinic_id, retain_all_sessions=True)
+    patient_id = await _make_patient(clinic_id)
+    encounter_id = await _make_full_encounter(
+        clinic_id, patient_id, provider_id, _days_ago(settings.retention_audio_days + 1)
+    )
+
+    with patch("app.services.retention_service.AsyncSessionLocal", TestSessionLocal):
+        result = await retention_service.run_retention_sweep()
+    assert result.archived == 0
+
+    async with TestSessionLocal() as session:
+        encounter = (await session.execute(select(Encounter).where(Encounter.id == encounter_id))).scalar_one()
+        assert encounter.archived_at is None
+        assert (
+            await session.execute(select(AudioFile).where(AudioFile.encounter_id == encounter_id))
+        ).scalar_one_or_none() is not None
+
+
+async def test_purge_stage_removes_transcript_and_note_at_record_retention_floor(client: AsyncClient):
+    """Past the ~7-year record-retention floor: everything left — audio (if
+    somehow still present), transcript, note — is gone for good."""
+    operator = await signup_clinic(client)
+    await _make_platform_admin(operator["email"])
+    clinic_id = uuid.UUID(await _new_clinic_id(client, operator["headers"]))
+    provider_id = await _make_provider(clinic_id)
+    patient_id = await _make_patient(clinic_id)
+    encounter_id = await _make_full_encounter(
+        clinic_id, patient_id, provider_id, _days_ago(settings.retention_record_days + 1)
+    )
+
+    with patch("app.services.retention_service.AsyncSessionLocal", TestSessionLocal):
+        result = await retention_service.run_retention_sweep()
+    # Same pass both archives (stage 1) and fully purges (stage 2) an
+    # encounter this old.
+    assert result.archived == 1
+    assert result.purged == 1
+
+    async with TestSessionLocal() as session:
+        encounter = (await session.execute(select(Encounter).where(Encounter.id == encounter_id))).scalar_one()
+        assert encounter.archived_at is not None
+        assert encounter.content_purged_at is not None
+
+        for model in (AudioFile, Transcript, ClinicalNote):
+            assert (
+                await session.execute(select(model).where(model.encounter_id == encounter_id))
+            ).scalar_one_or_none() is None
 
         audit = (
             await session.execute(
@@ -238,45 +333,56 @@ async def test_purge_sweep_removes_content_and_stamps_encounter(client: AsyncCli
         ).scalar_one_or_none()
         assert audit is not None
 
-    # Idempotent: a second sweep finds nothing left to do.
+    # Idempotent: a second sweep finds nothing left to do at all.
     with patch("app.services.retention_service.AsyncSessionLocal", TestSessionLocal):
-        purged_again = await retention_service.run_retention_sweep()
-    assert purged_again == 0
+        result_again = await retention_service.run_retention_sweep()
+    assert result_again.archived == 0
+    assert result_again.purged == 0
 
 
-async def test_purge_sweep_skips_encounters_within_the_retention_window(client: AsyncClient):
-    operator = await signup_clinic(client)
-    await _make_platform_admin(operator["email"])
-    clinic_id = uuid.UUID(await _new_clinic_id(client, operator["headers"]))
-    provider_id = await _make_provider(clinic_id)
-    patient_id = await _make_patient(clinic_id)
-    recent = datetime.now(timezone.utc) - timedelta(days=1)
-    encounter_id = await _make_full_encounter(clinic_id, patient_id, provider_id, recent)
-
-    with patch("app.services.retention_service.AsyncSessionLocal", TestSessionLocal):
-        purged = await retention_service.run_retention_sweep()
-    assert purged == 0
-
-    async with TestSessionLocal() as session:
-        encounter = (await session.execute(select(Encounter).where(Encounter.id == encounter_id))).scalar_one()
-        assert encounter.content_purged_at is None
-        assert (
-            await session.execute(select(AudioFile).where(AudioFile.encounter_id == encounter_id))
-        ).scalar_one_or_none() is not None
-
-
-async def test_purge_sweep_skips_providers_with_retain_all_sessions(client: AsyncClient):
+async def test_purge_stage_applies_even_to_retain_all_sessions_providers(client: AsyncClient):
+    """retain_all_sessions defers the 14-day audio purge, never the 7-year
+    regulatory floor — that's a fixed ceiling, not a per-doctor preference."""
     operator = await signup_clinic(client)
     await _make_platform_admin(operator["email"])
     clinic_id = uuid.UUID(await _new_clinic_id(client, operator["headers"]))
     provider_id = await _make_provider(clinic_id, retain_all_sessions=True)
     patient_id = await _make_patient(clinic_id)
-    old_enough = datetime.now(timezone.utc) - timedelta(days=settings.retention_days + 1)
-    encounter_id = await _make_full_encounter(clinic_id, patient_id, provider_id, old_enough)
+    encounter_id = await _make_full_encounter(
+        clinic_id, patient_id, provider_id, _days_ago(settings.retention_record_days + 1)
+    )
 
     with patch("app.services.retention_service.AsyncSessionLocal", TestSessionLocal):
-        purged = await retention_service.run_retention_sweep()
-    assert purged == 0
+        result = await retention_service.run_retention_sweep()
+    # Stage 1 is skipped for this provider (retain_all_sessions=True), but
+    # stage 2 still fires and cleans up the audio it left behind too.
+    assert result.archived == 0
+    assert result.purged == 1
+
+    async with TestSessionLocal() as session:
+        encounter = (await session.execute(select(Encounter).where(Encounter.id == encounter_id))).scalar_one()
+        assert encounter.content_purged_at is not None
+        for model in (AudioFile, Transcript, ClinicalNote):
+            assert (
+                await session.execute(select(model).where(model.encounter_id == encounter_id))
+            ).scalar_one_or_none() is None
+
+
+async def test_purge_stage_skips_encounters_within_the_record_window(client: AsyncClient):
+    operator = await signup_clinic(client)
+    await _make_platform_admin(operator["email"])
+    clinic_id = uuid.UUID(await _new_clinic_id(client, operator["headers"]))
+    provider_id = await _make_provider(clinic_id)
+    patient_id = await _make_patient(clinic_id)
+    # Old enough to archive, nowhere near old enough to fully purge.
+    encounter_id = await _make_full_encounter(
+        clinic_id, patient_id, provider_id, _days_ago(settings.retention_audio_days + 1)
+    )
+
+    with patch("app.services.retention_service.AsyncSessionLocal", TestSessionLocal):
+        result = await retention_service.run_retention_sweep()
+    assert result.archived == 1
+    assert result.purged == 0
 
     async with TestSessionLocal() as session:
         encounter = (await session.execute(select(Encounter).where(Encounter.id == encounter_id))).scalar_one()
@@ -284,3 +390,38 @@ async def test_purge_sweep_skips_providers_with_retain_all_sessions(client: Asyn
         assert (
             await session.execute(select(Transcript).where(Transcript.encounter_id == encounter_id))
         ).scalar_one_or_none() is not None
+        assert (
+            await session.execute(select(ClinicalNote).where(ClinicalNote.encounter_id == encounter_id))
+        ).scalar_one_or_none() is not None
+
+
+# --- GET /encounters?archived filter ----------------------------------------
+
+
+async def test_list_encounters_excludes_archived_by_default(client: AsyncClient):
+    admin = await signup_clinic(client)
+    provider = await create_user(client, admin["headers"], role="PROVIDER")
+    clinic_id = uuid.UUID(provider["clinic_id"])
+    provider_id = uuid.UUID(provider["id"])
+    patient_id = await _make_patient(clinic_id)
+
+    active_id = await _make_full_encounter(clinic_id, patient_id, provider_id, _days_ago(1))
+    archived_id = await _make_full_encounter(
+        clinic_id, patient_id, provider_id, _days_ago(settings.retention_audio_days + 1)
+    )
+    with patch("app.services.retention_service.AsyncSessionLocal", TestSessionLocal):
+        await retention_service.run_retention_sweep()
+
+    default_resp = await client.get("/api/v1/encounters", headers=provider["headers"])
+    assert default_resp.status_code == 200, default_resp.text
+    default_ids = {e["id"] for e in default_resp.json()}
+    assert str(active_id) in default_ids
+    assert str(archived_id) not in default_ids
+
+    archived_resp = await client.get(
+        "/api/v1/encounters", headers=provider["headers"], params={"archived": "true"}
+    )
+    archived_ids = {e["id"] for e in archived_resp.json()}
+    assert str(archived_id) in archived_ids
+    assert str(active_id) not in archived_ids
+    assert archived_resp.json()[0]["archived_at"] is not None

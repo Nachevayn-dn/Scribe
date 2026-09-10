@@ -1,25 +1,35 @@
-"""Auto-purges an encounter's audio, transcript and clinical note once
-settings.retention_days has passed since it started — unless the provider
-has a signed consent on file to retain everything (User.retain_all_sessions,
-see api/platform.py's retention toggle). Same "no task queue for MVP"
-trade-off as services/reminder_scheduler.py: a single in-process asyncio
-loop, started from FastAPI's lifespan in main.py, polls periodically and
-purges what's due. This loop's body is the seam to swap for a Celery beat
-task later.
+"""Two-stage data retention for a Scribe encounter, run as an in-process
+asyncio loop (see main.py's lifespan) — same "no task queue for MVP"
+trade-off as services/reminder_scheduler.py, whose shape this mirrors.
 
-What gets deleted vs. kept: the audio file (disk + row), the transcript and
-its entities, and the clinical note and its entities — the actual clinical
-content a patient would recognize as "my recording" or "my notes". The
-Encounter row itself is kept indefinitely (patient/provider/dates), so
-appointment history and the Analytics pillar (patients seen, follow-ups,
-revenue) keep working past the retention window — only the PHI-bearing
-content underneath it is removed. Encounter.content_purged_at is stamped the
-moment a purge is *attempted* (success or failure) for the same idempotency
-reason reminder_scheduler.py stamps its reminder columns: a sweep that hits
-a bad file path fails once and stops being retried every pass forever.
+Stage 1 — archive (settings.retention_audio_days, default 14, after
+started_at; skippable per-doctor via User.retain_all_sessions once a signed
+consent is on file — see api/platform.py's retention toggle): deletes the
+audio recording (disk + row) and stamps Encounter.archived_at. The
+transcript and clinical note are left alone — they're the medical record,
+and regulations require keeping that around regardless of what the patient
+agreed to about the raw recording. An archived encounter moves out of the
+doctor's day-to-day session list into a separate Archive view (see
+GET /encounters?archived=true) — still fully readable, just not cluttering
+the active list.
+
+Stage 2 — purge (settings.retention_record_days, ~7 years, after
+started_at; NOT skippable by retain_all_sessions — this is a fixed
+regulatory ceiling, not a per-doctor preference): deletes whatever's left —
+transcript + entities, clinical note + entities, and any audio a
+retain-all-sessions doctor never had purged in stage 1 — and stamps
+Encounter.content_purged_at.
+
+Both stamps are set the moment their stage is *attempted* (success or
+failure), for the same idempotency reason reminder_scheduler.py stamps its
+reminder columns: a sweep that hits a bad file path fails once and stops
+being retried every pass forever. The Encounter row itself — and its
+patient/provider/date links — is kept indefinitely either way, so
+appointment history and analytics keep working long past content_purged_at.
 """
 import asyncio
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -40,14 +50,43 @@ settings = get_settings()
 POLL_INTERVAL_SECONDS = 6 * 60 * 60  # retention is day-granularity; every 6h is plenty responsive
 
 
-async def _purge_encounter(db: AsyncSession, encounter: Encounter) -> None:
+@dataclass
+class SweepResult:
+    archived: int
+    purged: int
+
+
+async def _delete_audio_files(db: AsyncSession, encounter_id) -> None:
+    audio_files = (
+        await db.execute(select(AudioFile).where(AudioFile.encounter_id == encounter_id))
+    ).scalars().all()
+    for audio_file in audio_files:
+        storage.delete_audio(audio_file.storage_path)
+        await db.delete(audio_file)
+
+
+async def _archive_encounter(db: AsyncSession, encounter: Encounter) -> None:
     try:
-        audio_files = (
-            await db.execute(select(AudioFile).where(AudioFile.encounter_id == encounter.id))
-        ).scalars().all()
-        for audio_file in audio_files:
-            storage.delete_audio(audio_file.storage_path)
-            await db.delete(audio_file)
+        await _delete_audio_files(db, encounter.id)
+        await log_action(
+            db,
+            clinic_id=encounter.clinic_id,
+            actor_user_id=None,  # system action, not a logged-in user
+            action="ENCOUNTER_ARCHIVED",
+            resource_type="Encounter",
+            resource_id=str(encounter.id),
+            metadata={"retention_audio_days": settings.retention_audio_days},
+        )
+    except Exception:  # noqa: BLE001 — one encounter's failure must not stop the sweep
+        logger.exception("Retention archive step failed for encounter %s", encounter.id)
+    finally:
+        encounter.archived_at = datetime.now(timezone.utc)
+        await db.commit()
+
+
+async def _purge_encounter_content(db: AsyncSession, encounter: Encounter) -> None:
+    try:
+        await _delete_audio_files(db, encounter.id)  # in case retain_all_sessions skipped stage 1
 
         transcript = (
             await db.execute(select(Transcript).where(Transcript.encounter_id == encounter.id))
@@ -68,45 +107,69 @@ async def _purge_encounter(db: AsyncSession, encounter: Encounter) -> None:
             action="ENCOUNTER_CONTENT_PURGED",
             resource_type="Encounter",
             resource_id=str(encounter.id),
-            metadata={"retention_days": settings.retention_days},
+            metadata={"retention_record_days": settings.retention_record_days},
         )
     except Exception:  # noqa: BLE001 — one encounter's failure must not stop the sweep
-        logger.exception("Retention purge failed for encounter %s", encounter.id)
+        logger.exception("Retention purge step failed for encounter %s", encounter.id)
     finally:
+        if encounter.archived_at is None:
+            encounter.archived_at = datetime.now(timezone.utc)
         encounter.content_purged_at = datetime.now(timezone.utc)
         await db.commit()
 
 
-async def run_retention_sweep() -> int:
-    """One pass over every encounter past the retention window. Exposed
+async def run_retention_sweep() -> SweepResult:
+    """One pass over every encounter due for either stage. Exposed
     separately from the loop below so tests and a manual/CLI trigger can
-    call it directly. Returns the number of encounters purged."""
-    cutoff = datetime.now(timezone.utc) - timedelta(days=settings.retention_days)
+    call it directly."""
+    now = datetime.now(timezone.utc)
+    archive_cutoff = now - timedelta(days=settings.retention_audio_days)
+    purge_cutoff = now - timedelta(days=settings.retention_record_days)
+    archived = 0
     purged = 0
+
     async with AsyncSessionLocal() as db:
-        candidates = (
+        archive_candidates = (
             await db.execute(
                 select(Encounter)
                 .join(User, User.id == Encounter.provider_id)
                 .where(
+                    Encounter.archived_at.is_(None),
                     Encounter.content_purged_at.is_(None),
-                    Encounter.started_at <= cutoff,
+                    Encounter.started_at <= archive_cutoff,
                     User.retain_all_sessions.is_(False),
                 )
             )
         ).scalars().all()
-        for encounter in candidates:
-            await _purge_encounter(db, encounter)
+        for encounter in archive_candidates:
+            await _archive_encounter(db, encounter)
+            archived += 1
+
+        purge_candidates = (
+            await db.execute(
+                select(Encounter).where(
+                    Encounter.content_purged_at.is_(None),
+                    Encounter.started_at <= purge_cutoff,
+                )
+            )
+        ).scalars().all()
+        for encounter in purge_candidates:
+            await _purge_encounter_content(db, encounter)
             purged += 1
-    return purged
+
+    return SweepResult(archived=archived, purged=purged)
 
 
 async def retention_scheduler_loop() -> None:
     while True:
         try:
-            count = await run_retention_sweep()
-            if count:
-                logger.info("Retention sweep purged %d encounter(s)", count)
+            result = await run_retention_sweep()
+            if result.archived or result.purged:
+                logger.info(
+                    "Retention sweep archived %d encounter(s), fully purged %d",
+                    result.archived,
+                    result.purged,
+                )
         except Exception:  # noqa: BLE001 — keep the loop alive across transient failures
             logger.exception("Retention sweep crashed")
         await asyncio.sleep(POLL_INTERVAL_SECONDS)

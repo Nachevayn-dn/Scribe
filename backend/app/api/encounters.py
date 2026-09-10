@@ -91,6 +91,11 @@ async def list_encounters(
     patient_id: uuid.UUID | None = Query(default=None),
     provider_id: uuid.UUID | None = Query(default=None),
     status_filter: EncounterStatus | None = Query(default=None, alias="status"),
+    # False (default) = the normal active list, excluding anything the
+    # retention sweep has archived — matches every caller before this
+    # param existed. True = only archived sessions (see SessionsListPage's
+    # Archive toggle). Omit entirely to get both.
+    archived: bool | None = Query(default=False),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[Encounter]:
@@ -119,6 +124,8 @@ async def list_encounters(
         stmt = stmt.where(Encounter.provider_id == provider_id)
     if status_filter:
         stmt = stmt.where(Encounter.status == status_filter)
+    if archived is not None:
+        stmt = stmt.where(Encounter.archived_at.isnot(None) if archived else Encounter.archived_at.is_(None))
 
     stmt = stmt.order_by(Encounter.started_at.desc())
     result = await db.execute(stmt)

@@ -31,6 +31,10 @@ class EncounterResponse(BaseModel):
     appointment_time: datetime | None
     started_at: datetime
     ended_at: datetime | None
+    # Set once the retention sweep has removed this session's audio and
+    # moved it out of the normal session list — see
+    # services/retention_service.py. Still fully readable; just archived.
+    archived_at: datetime | None
 
     model_config = {"from_attributes": True}
 

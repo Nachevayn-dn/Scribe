@@ -63,10 +63,12 @@ class User(UUIDPkMixin, TimestampMixin, SoftDeleteMixin, Base):
     # no self-serve way to become one; it's flagged directly in the DB.
     is_platform_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # Data-retention override for this doctor's own sessions. Default False
-    # means the platform's normal policy applies — an encounter's audio,
-    # transcript and note are auto-purged after settings.retention_days (see
-    # services/retention_service.py) unless this is True. A platform admin
-    # only flips this to True once a signed retention-consent document is on
+    # means the platform's normal policy applies — an encounter's audio is
+    # purged and the session archived after settings.retention_audio_days
+    # (see services/retention_service.py) unless this is True; the
+    # transcript/note stay put either way until the ~7-year regulatory
+    # floor. A platform admin only flips this to True once a signed
+    # retention-consent document is on
     # file for the doctor (see ClinicDocument.provider_id) — enforced in the
     # API, not at the DB layer, same pattern as other platform-admin gates.
     retain_all_sessions: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

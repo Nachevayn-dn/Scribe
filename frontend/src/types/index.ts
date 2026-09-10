@@ -105,6 +105,9 @@ export interface Encounter {
   appointment_time: string | null;
   started_at: string;
   ended_at: string | null;
+  // Set once the retention sweep removed this session's audio and moved it
+  // out of the normal session list — still fully readable, just archived.
+  archived_at: string | null;
 }
 
 export interface DashboardSummary {

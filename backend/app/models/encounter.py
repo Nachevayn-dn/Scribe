@@ -63,13 +63,27 @@ class Encounter(UUIDPkMixin, TimestampMixin, Base):
         DateTime(timezone=True), nullable=False, server_default="now()"
     )
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    # Set once services/retention_service.py has purged this encounter's
-    # audio, transcript and note (settings.retention_days after started_at,
-    # unless the provider has User.retain_all_sessions set). The Encounter
-    # row itself, and its patient/provider/date links, are kept indefinitely
-    # for analytics and audit history — only the recording and clinical
-    # content are deleted. Null means untouched; idempotency guard so a
-    # crashed sweep never re-purges or double-logs the same encounter.
+    # Two-stage retention (see services/retention_service.py):
+    #
+    # Stage 1, archived_at — set settings.retention_audio_days after
+    # started_at (unless the provider has User.retain_all_sessions set).
+    # Only the audio recording is deleted at this point; the transcript and
+    # clinical note are untouched, since they're the medical record and
+    # regulations require keeping that around regardless. The encounter
+    # moves out of the doctor's normal session list into a separate Archive
+    # view (see GET /encounters?archived=true) — still fully readable, just
+    # not part of the day-to-day list.
+    #
+    # Stage 2, content_purged_at — set settings.retention_record_days
+    # (~7 years) after started_at, for every encounter regardless of
+    # retain_all_sessions (a fixed regulatory ceiling, not a per-doctor
+    # preference). Deletes whatever's left — transcript, note, and any
+    # audio a retain-all doctor never had purged in stage 1.
+    #
+    # Both null means untouched. The Encounter row itself, and its
+    # patient/provider/date links, are kept indefinitely either way — for
+    # analytics and audit history — even past content_purged_at.
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     content_purged_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

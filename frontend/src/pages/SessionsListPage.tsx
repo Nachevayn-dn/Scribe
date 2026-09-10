@@ -38,6 +38,7 @@ export function SessionsListPage() {
   const patientIdFilter = searchParams.get("patient_id");
   const range = searchParams.get("range") === "week" ? "week" : "all";
   const scheduledOnly = searchParams.get("scheduled") === "true";
+  const archivedOnly = searchParams.get("archived") === "true";
 
   const [encounters, setEncounters] = useState<Encounter[]>([]);
   const [patientsById, setPatientsById] = useState<Record<string, Patient>>({});
@@ -50,7 +51,10 @@ export function SessionsListPage() {
     (async () => {
       try {
         const [enc, patients, providers] = await Promise.all([
-          encountersApi.listEncounters(patientIdFilter ? { patient_id: patientIdFilter } : undefined),
+          encountersApi.listEncounters({
+            patient_id: patientIdFilter ?? undefined,
+            archived: archivedOnly,
+          }),
           patientsApi.listPatients(),
           usersApi.myAssignedProviders(),
         ]);
@@ -63,7 +67,7 @@ export function SessionsListPage() {
         setLoading(false);
       }
     })();
-  }, [patientIdFilter]);
+  }, [patientIdFilter, archivedOnly]);
 
   const visible = useMemo(() => {
     let list = [...encounters].sort(
@@ -92,11 +96,13 @@ export function SessionsListPage() {
     <div className="page stack">
       <div className="row" style={{ justifyContent: "space-between" }}>
         <h1 style={{ fontSize: 22 }}>
-          {filterPatient
-            ? `Scribe sessions for ${filterPatient.first_name} ${filterPatient.last_name}`
-            : scheduledOnly
-              ? "Scheduled appointments"
-              : "Scribe sessions"}
+          {archivedOnly
+            ? "Archived sessions"
+            : filterPatient
+              ? `Scribe sessions for ${filterPatient.first_name} ${filterPatient.last_name}`
+              : scheduledOnly
+                ? "Scheduled appointments"
+                : "Scribe sessions"}
         </h1>
         <div className="row">
           {patientIdFilter && (
@@ -134,7 +140,23 @@ export function SessionsListPage() {
           >
             {scheduledOnly ? "✓ Scheduled only" : "Scheduled only"}
           </button>
+          <span style={{ width: 1, background: "var(--color-border)", alignSelf: "stretch" }} />
+          <button
+            className="btn"
+            style={archivedOnly ? { borderColor: "var(--color-primary)", color: "var(--color-primary)" } : undefined}
+            onClick={() => toggleParam("archived", archivedOnly ? null : "true")}
+          >
+            {archivedOnly ? "✓ Archived" : "Archived"}
+          </button>
         </div>
+      )}
+
+      {archivedOnly && (
+        <p style={{ fontSize: 12.5, color: "var(--color-text-muted)", margin: 0 }}>
+          These sessions are older than the platform's audio-retention window, so the recording has
+          been removed. The transcript and clinical note are still here and fully readable — medical
+          records are kept for 7 years regardless.
+        </p>
       )}
 
       {error && <div className="error-text">{error}</div>}
@@ -206,13 +228,15 @@ export function SessionsListPage() {
             {visible.length === 0 && (
               <tr>
                 <td colSpan={filterPatient ? 6 : 7} style={{ color: "var(--color-text-muted)" }}>
-                  {scheduledOnly
-                    ? "No scheduled appointments in this range."
-                    : patientIdFilter
-                      ? "No sessions yet for this patient."
-                      : range === "week"
-                        ? "No sessions in the last 7 days."
-                        : "No sessions yet."}
+                  {archivedOnly
+                    ? "No archived sessions yet."
+                    : scheduledOnly
+                      ? "No scheduled appointments in this range."
+                      : patientIdFilter
+                        ? "No sessions yet for this patient."
+                        : range === "week"
+                          ? "No sessions in the last 7 days."
+                          : "No sessions yet."}
                 </td>
               </tr>
             )}
