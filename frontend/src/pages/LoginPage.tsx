@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { ApiError } from "../api/client";
 
@@ -51,9 +51,10 @@ export function LoginPage() {
             {submitting ? "Signing in…" : "Sign in"}
           </button>
         </form>
-        <div style={{ fontSize: 13 }}>
-          New clinic? <Link to="/signup">Set up your practice</Link>
-        </div>
+        {/* Intentionally no public "set up your practice" link here — real
+            clinics are onboarded through the Platform Admin console, not
+            self-serve. The /signup page itself still works at its direct
+            URL (App.tsx) for sharing privately with test users. */}
       </div>
     </div>
   );
