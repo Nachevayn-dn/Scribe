@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy import or_, select
@@ -8,8 +9,17 @@ from app.core.exceptions import ForbiddenError, NotFoundError
 from app.database import get_db
 from app.deps import client_ip, get_current_user
 from app.models.template import NoteTemplate
+from app.models.template_section_translation import TemplateSectionTranslation
 from app.models.user import User, UserRole
-from app.schemas.template import TemplateCreateRequest, TemplateResponse, TemplateUpdateRequest
+from app.schemas.template import (
+    TemplateCreateRequest,
+    TemplateResponse,
+    TemplateSectionTranslationDraftResponse,
+    TemplateSectionTranslationRequest,
+    TemplateSectionTranslationResponse,
+    TemplateUpdateRequest,
+)
+from app.services import section_translation_service
 from app.services.audit_service import log_action
 
 router = APIRouter(prefix="/templates", tags=["templates"])
@@ -59,6 +69,21 @@ async def create_template(
     )
     await db.commit()
     await db.refresh(template)
+    return template
+
+
+async def _get_visible_template(db: AsyncSession, current_user: User, template_id: uuid.UUID) -> NoteTemplate:
+    """Read access to any template the doctor can already pick in
+    TemplateSelectorPanel — global templates included. Deliberately looser
+    than _get_editable_template below: translating a shared global
+    template's headers doesn't change the template itself for anyone else,
+    so it isn't gated by who created it."""
+    result = await db.execute(select(NoteTemplate).where(NoteTemplate.id == template_id))
+    template = result.scalar_one_or_none()
+    if template is None:
+        raise NotFoundError("Template not found")
+    if template.clinic_id is not None and template.clinic_id != current_user.clinic_id:
+        raise NotFoundError("Template not found")
     return template
 
 
@@ -124,3 +149,92 @@ async def delete_template(
         ip_address=client_ip(request),
     )
     await db.commit()
+
+
+@router.get(
+    "/{template_id}/translations/{language}", response_model=TemplateSectionTranslationDraftResponse
+)
+async def get_template_translation(
+    template_id: uuid.UUID,
+    language: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> TemplateSectionTranslationDraftResponse:
+    """Confirmed translation on file if there is one; otherwise a fresh
+    Claude-drafted starting point (not saved — see PUT below to confirm)."""
+    template = await _get_visible_template(db, current_user, template_id)
+    existing = (
+        await db.execute(
+            select(TemplateSectionTranslation).where(
+                TemplateSectionTranslation.template_id == template_id,
+                TemplateSectionTranslation.language == language,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        return TemplateSectionTranslationDraftResponse(
+            template_id=template_id,
+            language=language,
+            translated_structure=existing.translated_structure,
+            is_confirmed=True,
+        )
+
+    draft = await section_translation_service.draft_section_translation(template.structure, language)
+    return TemplateSectionTranslationDraftResponse(
+        template_id=template_id, language=language, translated_structure=draft, is_confirmed=False
+    )
+
+
+@router.put(
+    "/{template_id}/translations/{language}", response_model=TemplateSectionTranslationResponse
+)
+async def confirm_template_translation(
+    template_id: uuid.UUID,
+    language: str,
+    payload: TemplateSectionTranslationRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> TemplateSectionTranslation:
+    """Saves the doctor's reviewed (or freely rewritten) section titles for
+    this template+language — every future session in that language with
+    this template renders headers from here on, automatically."""
+    if current_user.role == UserRole.ASSISTANT:
+        raise ForbiddenError("Assistants cannot manage templates")
+    await _get_visible_template(db, current_user, template_id)  # 404s if not visible
+
+    existing = (
+        await db.execute(
+            select(TemplateSectionTranslation).where(
+                TemplateSectionTranslation.template_id == template_id,
+                TemplateSectionTranslation.language == language,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        existing.translated_structure = payload.translated_structure
+        existing.confirmed_by_id = current_user.id
+        existing.confirmed_at = datetime.now(timezone.utc)
+        translation = existing
+    else:
+        translation = TemplateSectionTranslation(
+            template_id=template_id,
+            language=language,
+            translated_structure=payload.translated_structure,
+            confirmed_by_id=current_user.id,
+        )
+        db.add(translation)
+
+    await log_action(
+        db,
+        clinic_id=current_user.clinic_id,
+        actor_user_id=current_user.id,
+        action="TEMPLATE_TRANSLATION_CONFIRMED",
+        resource_type="NoteTemplate",
+        resource_id=str(template_id),
+        metadata={"language": language},
+        ip_address=client_ip(request),
+    )
+    await db.commit()
+    await db.refresh(translation)
+    return translation

@@ -1,5 +1,5 @@
 import { api } from "./client";
-import type { AskAIResult, ClinicalNote, ShareResult, Transcript } from "../types";
+import type { AskAIResult, ClinicalNote, PatientShareLog, PatientShareResult, ShareResult, Transcript } from "../types";
 
 export function getTranscript(encounterId: string) {
   return api.get<Transcript>(`/encounters/${encounterId}/transcript`);
@@ -59,6 +59,20 @@ export function shareEncounterContent(
     recipients,
     include_self: includeSelf,
   });
+}
+
+/** Emails the signed note straight to the patient's email on file,
+ * formatted as a letter (Dear <patient> / ... / Best regards, <doctor>) —
+ * distinct from shareEncounterContent above, which sends the raw
+ * transcript/note to staff recipients the doctor types in. */
+export function shareNoteWithPatient(encounterId: string) {
+  return api.post<PatientShareResult>(`/encounters/${encounterId}/share-with-patient`);
+}
+
+/** The "summaries list" — every patient-facing letter sent for this
+ * encounter so far, most recent first. */
+export function listPatientShares(encounterId: string) {
+  return api.get<PatientShareLog[]>(`/encounters/${encounterId}/patient-shares`);
 }
 
 /** Free-form instruction against the current note — Claude either reworks

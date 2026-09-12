@@ -11,7 +11,8 @@ from app.models.appointment import Appointment, AppointmentStatus
 from app.models.encounter import Encounter
 from app.models.inbound_call_session import InboundCallSession
 from app.models.user import ProviderAssistant, User, UserRole
-from app.schemas.dashboard import DashboardSummaryResponse
+from app.schemas.dashboard import DailyRecapResponse, DashboardSummaryResponse
+from app.services import daily_recap_service
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -26,12 +27,12 @@ async def _assigned_provider_ids(db: AsyncSession, assistant_id) -> list:
     ).scalars().all()
 
 
-@router.get("/summary", response_model=DashboardSummaryResponse)
-async def get_dashboard_summary(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+async def compute_dashboard_summary(
+    db: AsyncSession, current_user: User
 ) -> DashboardSummaryResponse:
-    # Same clinic/role scoping as GET /encounters (list_encounters).
+    """Shared by GET /dashboard/summary and services/daily_recap_service.py
+    (the recap is written from these same numbers) — same clinic/role
+    scoping as GET /encounters (list_encounters)."""
     stmt = select(Encounter).where(Encounter.clinic_id == current_user.clinic_id)
     appt_stmt = select(Appointment).where(Appointment.clinic_id == current_user.clinic_id)
     call_stmt = select(InboundCallSession).where(InboundCallSession.clinic_id == current_user.clinic_id)
@@ -97,3 +98,20 @@ async def get_dashboard_summary(
         upcoming_appointments=upcoming,
         inbound_calls_this_week=inbound_calls,
     )
+
+
+@router.get("/summary", response_model=DashboardSummaryResponse)
+async def get_dashboard_summary(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> DashboardSummaryResponse:
+    return await compute_dashboard_summary(db, current_user)
+
+
+@router.get("/recap", response_model=DailyRecapResponse)
+async def get_daily_recap(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> DailyRecapResponse:
+    recap = await daily_recap_service.get_or_create_recap(db, current_user)
+    return DailyRecapResponse(summary_text=recap.summary_text, recap_date=recap.recap_date)

@@ -63,6 +63,17 @@ export interface ClinicDocument {
   created_at: string;
 }
 
+export interface Announcement {
+  id: string;
+  clinic_id: string | null;
+  created_by_id: string;
+  title: string | null;
+  message: string;
+  has_video: boolean;
+  is_active: boolean;
+  created_at: string;
+}
+
 export interface PlatformAnalytics {
   clinics_count: number;
   active_doctors_count: number;
@@ -115,6 +126,11 @@ export interface DashboardSummary {
   scheduled_appointment_sessions_this_week: number;
   upcoming_appointments: number;
   inbound_calls_this_week: number;
+}
+
+export interface DailyRecap {
+  summary_text: string;
+  recap_date: string;
 }
 
 export type AppointmentStatus = "PROPOSED" | "SCHEDULED" | "CANCELLED";
@@ -183,6 +199,13 @@ export interface NoteTemplate {
   is_active: boolean;
 }
 
+export interface TemplateSectionTranslationDraft {
+  template_id: string;
+  language: string;
+  translated_structure: string[];
+  is_confirmed: boolean;
+}
+
 export interface DoctorPreference {
   id: string;
   provider_id: string;
@@ -195,6 +218,21 @@ export interface ShareResult {
   status: "sent";
   message_id: string;
   recipients: string[];
+}
+
+export interface PatientShareResult {
+  status: "sent";
+  message_id: string;
+  recipient: string;
+}
+
+export interface PatientShareLog {
+  id: string;
+  encounter_id: string;
+  sent_by_id: string;
+  recipient_email: string;
+  body_text: string;
+  sent_at: string;
 }
 
 export interface AskAISource {

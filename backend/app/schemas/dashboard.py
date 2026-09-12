@@ -1,4 +1,11 @@
+from datetime import date
+
 from pydantic import BaseModel
+
+
+class DailyRecapResponse(BaseModel):
+    summary_text: str
+    recap_date: date
 
 
 class DashboardSummaryResponse(BaseModel):

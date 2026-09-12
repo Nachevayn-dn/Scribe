@@ -209,6 +209,7 @@ export function EncounterRecordingPage() {
           patientId={encounter.patient_id}
           providerId={encounter.provider_id}
           patientName={patient ? `${patient.first_name} ${patient.last_name}` : "this patient"}
+          patientEmail={patient?.email ?? null}
           providerName={
             providers.find((p) => p.id === encounter.provider_id)?.full_name ?? "your doctor"
           }

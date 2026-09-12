@@ -13,6 +13,7 @@ from app.database import get_db
 from app.deps import client_ip, get_current_user
 from app.models.clinical_note import ClinicalNote, NoteStatus
 from app.models.encounter import Encounter, EncounterStatus
+from app.models.patient_share_log import PatientShareLog
 from app.models.transcript import Transcript
 from app.models.user import User
 from app.schemas.note import (
@@ -20,6 +21,8 @@ from app.schemas.note import (
     AskAIResponse,
     ClinicalNoteResponse,
     NoteLineEditRequest,
+    PatientShareLogResponse,
+    PatientShareResponse,
     ShareRequest,
     ShareResponse,
     TranscriptLineEditRequest,
@@ -343,6 +346,84 @@ async def share_encounter_content(
     )
     await db.commit()
     return ShareResponse(status="sent", message_id=message_id, recipients=recipients)
+
+
+@router.post("/{encounter_id}/share-with-patient", response_model=PatientShareResponse)
+async def share_note_with_patient(
+    encounter_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PatientShareResponse:
+    """Emails the signed note straight to the patient, formatted as a
+    letter (Dear <patient first name> / ... / Best regards, <doctor>) —
+    distinct from POST .../share above, which sends the raw transcript or
+    note to staff/EHR recipients the doctor types in. Every send is logged
+    to PatientShareLog (see GET .../patient-shares) so the doctor can see
+    what a patient was actually sent, even after the note is later edited."""
+    encounter = await _get_accessible_encounter(db, current_user, encounter_id)
+    patient = encounter.patient
+    if not patient.email:
+        raise BadRequestError("This patient has no email on file — add one before sharing.")
+
+    note = await _get_note(db, encounter_id)
+    visit_date = encounter.started_at.date().isoformat()
+    body_text = (
+        f"Dear {patient.first_name},\n\n"
+        f"{note.rendered_content}\n\n"
+        f"Best regards,\n{current_user.full_name}"
+    )
+    reply_to = current_user.notification_email or current_user.email
+
+    try:
+        message_id = send_share_email(
+            to=[patient.email],
+            subject=f"Your visit summary — {visit_date}",
+            body_text=body_text,
+            reply_to=reply_to,
+        )
+    except EmailNotConfiguredError as exc:
+        raise BadRequestError(str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    db.add(
+        PatientShareLog(
+            encounter_id=encounter_id,
+            sent_by_id=current_user.id,
+            recipient_email=patient.email,
+            body_text=body_text,
+        )
+    )
+    await log_action(
+        db,
+        clinic_id=current_user.clinic_id,
+        actor_user_id=current_user.id,
+        action="NOTE_SHARED_WITH_PATIENT",
+        resource_type="Encounter",
+        resource_id=str(encounter_id),
+        metadata={"recipient": patient.email},
+        ip_address=client_ip(request),
+    )
+    await db.commit()
+    return PatientShareResponse(status="sent", message_id=message_id, recipient=patient.email)
+
+
+@router.get("/{encounter_id}/patient-shares", response_model=list[PatientShareLogResponse])
+async def list_patient_shares(
+    encounter_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[PatientShareLog]:
+    """The "summaries list" for this encounter — every patient-facing
+    letter sent so far, most recent first."""
+    await _get_accessible_encounter(db, current_user, encounter_id)
+    result = await db.execute(
+        select(PatientShareLog)
+        .where(PatientShareLog.encounter_id == encounter_id)
+        .order_by(PatientShareLog.sent_at.desc())
+    )
+    return list(result.scalars().all())
 
 
 @router.post("/{encounter_id}/note/ask-ai", response_model=AskAIResponse)

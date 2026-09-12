@@ -71,7 +71,13 @@ class ClinicalExtractionProvider(ABC):
         transcript_text: str,
         preferences: list[DoctorPreference],
         template: NoteTemplate | None,
+        section_titles_override: list[str] | None = None,
     ) -> ExtractionResult:
+        """section_titles_override replaces template.structure's section
+        names verbatim (same order/length) when given — used to render
+        section headers in the visit's own language instead of the
+        template's stored (usually English) titles. See
+        models/template_section_translation.py."""
         raise NotImplementedError
 
     @abstractmethod

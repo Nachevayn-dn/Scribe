@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import * as notesApi from "../api/notes";
-import type { ClinicalNote } from "../types";
+import type { ClinicalNote, PatientShareLog } from "../types";
 import { ScheduleFollowUpModal } from "../components/encounters/ScheduleFollowUpModal";
 import { ShareEmailModal } from "../components/encounters/ShareEmailModal";
 import { AskAIPanel } from "../components/notes/AskAIPanel";
@@ -14,6 +14,7 @@ interface Props {
   patientId: string;
   providerId: string;
   patientName: string;
+  patientEmail: string | null;
   providerName: string;
   note: ClinicalNote;
   canEdit: boolean;
@@ -26,6 +27,7 @@ export function NoteEditorPage({
   patientId,
   providerId,
   patientName,
+  patientEmail,
   providerName,
   note,
   canEdit,
@@ -38,6 +40,29 @@ export function NoteEditorPage({
   const [sharing, setSharing] = useState(false);
   const [scheduling, setScheduling] = useState(false);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied">("idle");
+  const [sharingWithPatient, setSharingWithPatient] = useState(false);
+  const [patientShares, setPatientShares] = useState<PatientShareLog[]>([]);
+
+  useEffect(() => {
+    if (note.status !== "SIGNED") return;
+    notesApi.listPatientShares(encounterId).then(setPatientShares).catch(() => setPatientShares([]));
+  }, [encounterId, note.status]);
+
+  async function handleShareWithPatient() {
+    if (!patientEmail) return;
+    if (!window.confirm(`Send this summary to ${patientName} at ${patientEmail}?`)) return;
+    setSharingWithPatient(true);
+    setError(null);
+    try {
+      await notesApi.shareNoteWithPatient(encounterId);
+      const shares = await notesApi.listPatientShares(encounterId);
+      setPatientShares(shares);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to send to patient");
+    } finally {
+      setSharingWithPatient(false);
+    }
+  }
 
   const lines = note.rendered_content.split("\n");
   const readOnly = !canEdit || note.status === "SIGNED";
@@ -124,6 +149,16 @@ export function NoteEditorPage({
             <button className="btn" onClick={() => setSharing(true)}>
               Share via email
             </button>
+            {note.status === "SIGNED" && (
+              <button
+                className="btn"
+                onClick={handleShareWithPatient}
+                disabled={sharingWithPatient || !patientEmail}
+                title={patientEmail ? undefined : "Add an email for this patient first"}
+              >
+                {sharingWithPatient ? "Sending…" : "Share with patient"}
+              </button>
+            )}
             <button className="btn" onClick={handleCopyForPms} title="Copies the note so you can paste it into your PMS">
               {copyStatus === "copied" ? "Copied ✓" : "Copy for PMS"}
             </button>
@@ -155,6 +190,17 @@ export function NoteEditorPage({
       </div>
 
       {error && <div className="error-text">{error}</div>}
+
+      {note.status === "SIGNED" && patientShares.length > 0 && (
+        <div className="stack" style={{ gap: 4, fontSize: 13, color: "var(--color-text-muted)" }}>
+          <strong style={{ fontSize: 13, color: "var(--color-text)" }}>Shared with patient</strong>
+          {patientShares.map((share) => (
+            <div key={share.id}>
+              Sent to {share.recipient_email} on {new Date(share.sent_at).toLocaleString()}
+            </div>
+          ))}
+        </div>
+      )}
 
       {canSign && note.status !== "SIGNED" && (
         <div>

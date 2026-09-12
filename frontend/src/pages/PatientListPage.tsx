@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import * as patientsApi from "../api/patients";
 import * as usersApi from "../api/users";
-import { StartScribeSessionModal } from "../components/encounters/StartScribeSessionModal";
+import { StartSessionButton } from "../components/encounters/StartSessionButton";
 import type { Encounter, Patient, User } from "../types";
 import { ApiError } from "../api/client";
 
@@ -13,7 +13,7 @@ export function PatientListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [startingFor, setStartingFor] = useState<Patient | null>(null);
+  const [search, setSearch] = useState("");
 
   async function refresh() {
     setLoading(true);
@@ -56,6 +56,15 @@ export function PatientListPage() {
     navigate(`/encounters/${encounter.id}`);
   }
 
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return patients;
+    return patients.filter((p) => {
+      const fullName = `${p.first_name} ${p.last_name}`.toLowerCase();
+      return fullName.includes(term) || p.date_of_birth.includes(term);
+    });
+  }, [patients, search]);
+
   if (loading) return <div className="page">Loading…</div>;
 
   return (
@@ -83,6 +92,14 @@ export function PatientListPage() {
         </form>
       )}
 
+      <input
+        className="input"
+        placeholder="Search by name or date of birth (YYYY-MM-DD)…"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        style={{ maxWidth: 360 }}
+      />
+
       <div className="card">
         <table>
           <thead>
@@ -96,7 +113,7 @@ export function PatientListPage() {
             </tr>
           </thead>
           <tbody>
-            {patients.map((p) => (
+            {filtered.map((p) => (
               <tr key={p.id}>
                 <td>
                   <Link to={`/sessions?patient_id=${p.id}`}>
@@ -108,37 +125,20 @@ export function PatientListPage() {
                 <td>{p.phone ?? "—"}</td>
                 <td>{p.email ?? "—"}</td>
                 <td>
-                  <button
-                    className="btn"
-                    disabled={providers.length === 0}
-                    onClick={() => setStartingFor(p)}
-                    title={providers.length === 0 ? "No doctor available to record for" : undefined}
-                  >
-                    Start Scribe session
-                  </button>
+                  <StartSessionButton patient={p} providers={providers} onStarted={handleStarted} onError={setError} />
                 </td>
               </tr>
             ))}
-            {patients.length === 0 && (
+            {filtered.length === 0 && (
               <tr>
                 <td colSpan={6} style={{ color: "var(--color-text-muted)" }}>
-                  No patients yet.
+                  {patients.length === 0 ? "No patients yet." : "No patients match your search."}
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
-
-      {startingFor && (
-        <StartScribeSessionModal
-          key={startingFor.id}
-          patient={startingFor}
-          providers={providers}
-          onClose={() => setStartingFor(null)}
-          onStarted={handleStarted}
-        />
-      )}
     </div>
   );
 }

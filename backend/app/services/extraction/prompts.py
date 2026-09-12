@@ -26,11 +26,13 @@ def build_user_prompt(
     transcript_text: str,
     preferences: list[DoctorPreference],
     template: NoteTemplate | None,
+    section_titles_override: list[str] | None = None,
 ) -> str:
     parts = [f"Transcript:\n\"\"\"\n{transcript_text}\n\"\"\""]
 
-    if template is not None and template.structure:
-        sections = ", ".join(str(s) for s in template.structure)
+    section_titles = section_titles_override or (template.structure if template is not None else None)
+    if section_titles:
+        sections = ", ".join(str(s) for s in section_titles)
         parts.append(
             f"Organize the note using these sections, in order, as section-header lines: "
             f"{sections}."

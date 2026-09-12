@@ -18,12 +18,14 @@ from app.core.exceptions import BadRequestError, ConflictError, ForbiddenError, 
 from app.core.security import hash_password
 from app.database import get_db
 from app.deps import client_ip, require_platform_admin
+from app.models.announcement import Announcement
 from app.models.clinic import Clinic
 from app.models.clinic_document import ClinicDocument, ClinicDocumentType
 from app.models.clinical_note import ClinicalNote, NoteStatus
 from app.models.encounter import Encounter
 from app.models.patient import Patient
 from app.models.user import User, UserRole
+from app.schemas.announcement import AnnouncementResponse
 from app.schemas.encounter import EncounterResponse
 from app.schemas.patient import PatientResponse
 from app.schemas.platform import (
@@ -38,7 +40,7 @@ from app.schemas.platform import (
     SendSetupLinkResponse,
 )
 from app.schemas.user import UserResponse
-from app.services import auth_service, document_storage
+from app.services import announcement_storage, auth_service, document_storage
 from app.services.audit_service import log_action
 from app.services.email_service import EmailNotConfiguredError, send_share_email
 
@@ -47,6 +49,8 @@ settings = get_settings()
 
 _MAX_DOCUMENT_BYTES = 20 * 1024 * 1024  # 20 MB
 _ALLOWED_DOCUMENT_MIME_TYPES = {"application/pdf", "image/png", "image/jpeg"}
+_MAX_VIDEO_BYTES = 200 * 1024 * 1024  # 200 MB
+_ALLOWED_VIDEO_MIME_TYPES = {"video/mp4", "video/webm", "video/quicktime"}
 
 
 async def _get_clinic_or_404(db: AsyncSession, clinic_id: uuid.UUID) -> Clinic:
@@ -493,3 +497,89 @@ async def platform_analytics(
         sessions_this_week=sessions_this_week,
         notes_signed_this_week=notes_signed_this_week,
     )
+
+
+@router.post("/announcements", response_model=AnnouncementResponse, status_code=201)
+async def create_announcement(
+    request: Request,
+    message: str = Form(...),
+    title: str | None = Form(None),
+    clinic_id: uuid.UUID | None = Form(None),
+    video: UploadFile | None = File(None),
+    current_user: User = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+) -> AnnouncementResponse:
+    """clinic_id omitted (or null) broadcasts to every clinic on the
+    platform — "send to everyone." Shown to doctors/users as a
+    must-acknowledge popup (see GET /announcements/pending)."""
+    if clinic_id is not None:
+        await _get_clinic_or_404(db, clinic_id)
+
+    announcement = Announcement(
+        clinic_id=clinic_id, created_by_id=current_user.id, title=title, message=message
+    )
+    db.add(announcement)
+    await db.flush()
+
+    if video is not None:
+        content = await video.read()
+        if len(content) > _MAX_VIDEO_BYTES:
+            raise BadRequestError("Video must be 200 MB or smaller")
+        mime_type = video.content_type or "application/octet-stream"
+        if mime_type not in _ALLOWED_VIDEO_MIME_TYPES:
+            raise BadRequestError("Only MP4, WebM, or MOV videos are accepted")
+        storage_path = await announcement_storage.save_announcement_video(
+            announcement.id, content, video.filename or "video"
+        )
+        announcement.video_storage_path = storage_path
+        announcement.video_mime_type = mime_type
+        announcement.video_original_filename = video.filename or "video"
+
+    await log_action(
+        db,
+        clinic_id=clinic_id or current_user.clinic_id,
+        actor_user_id=current_user.id,
+        action="PLATFORM_ANNOUNCEMENT_CREATED",
+        resource_type="Announcement",
+        resource_id=str(announcement.id),
+        metadata={"clinic_id": str(clinic_id) if clinic_id else "all", "has_video": video is not None},
+        ip_address=client_ip(request),
+    )
+    await db.commit()
+    await db.refresh(announcement)
+    return AnnouncementResponse.from_model(announcement)
+
+
+@router.get("/announcements", response_model=list[AnnouncementResponse])
+async def list_announcements(
+    current_user: User = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+) -> list[AnnouncementResponse]:
+    result = await db.execute(select(Announcement).order_by(Announcement.created_at.desc()))
+    return [AnnouncementResponse.from_model(a) for a in result.scalars().all()]
+
+
+@router.delete("/announcements/{announcement_id}", status_code=204)
+async def deactivate_announcement(
+    announcement_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Retires an announcement — anyone who hasn't seen it yet stops being
+    shown it. Doesn't delete the row or anyone's acknowledgment history."""
+    result = await db.execute(select(Announcement).where(Announcement.id == announcement_id))
+    announcement = result.scalar_one_or_none()
+    if announcement is None:
+        raise NotFoundError("Announcement not found")
+    announcement.is_active = False
+    await log_action(
+        db,
+        clinic_id=announcement.clinic_id or current_user.clinic_id,
+        actor_user_id=current_user.id,
+        action="PLATFORM_ANNOUNCEMENT_DEACTIVATED",
+        resource_type="Announcement",
+        resource_id=str(announcement_id),
+        ip_address=client_ip(request),
+    )
+    await db.commit()

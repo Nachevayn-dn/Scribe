@@ -75,6 +75,25 @@ class ShareResponse(BaseModel):
     recipients: list[str]
 
 
+class PatientShareResponse(BaseModel):
+    status: Literal["sent"]
+    message_id: str
+    recipient: str
+
+
+class PatientShareLogResponse(BaseModel):
+    """One row in an encounter's "shared with patient" history."""
+
+    id: uuid.UUID
+    encounter_id: uuid.UUID
+    sent_by_id: uuid.UUID
+    recipient_email: str
+    body_text: str
+    sent_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class AskAIRequest(BaseModel):
     instruction: str = Field(min_length=1, max_length=2000)
 

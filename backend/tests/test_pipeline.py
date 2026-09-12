@@ -214,7 +214,7 @@ async def test_active_doctor_preferences_reach_the_extraction_call(client: Async
 
     assert generate_resp.status_code == 200, generate_resp.text
     extract_mock.assert_awaited_once()
-    _, call_preferences, call_template = extract_mock.await_args.args
+    _, call_preferences, call_template, _section_titles_override = extract_mock.await_args.args
     assert len(call_preferences) == 1
     assert call_preferences[0].instruction == "always suggest a CBCT scan"
     assert call_template is not None

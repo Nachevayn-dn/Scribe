@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { DoctorAvatar } from "./DoctorAvatar";
 import { LogoutLink } from "./LogoutLink";
@@ -11,8 +11,28 @@ const ROLE_LABELS: Record<string, string> = {
   ASSISTANT: "Assistant",
 };
 
+/** The small label under the MedicDesk.ai wordmark — names whichever
+ * product area the page belongs to, rather than always reading "Ambient
+ * Scribe" regardless of where you actually are. Blank on the dashboard
+ * itself. Ordered longest-prefix-first isn't needed here since none of
+ * these prefixes nest inside each other. */
+const SECTION_LABEL_BY_PATH_PREFIX: [string, string][] = [
+  ["/sessions", "Ambient Scribe"],
+  ["/encounters", "Ambient Scribe"],
+  ["/clinic/inbound", "Inbound & Outbound Agents"],
+  ["/clinic/outbound", "Inbound & Outbound Agents"],
+  ["/clinic/analytics", "Analytics"],
+];
+
+function sectionLabelFor(pathname: string): string | null {
+  const match = SECTION_LABEL_BY_PATH_PREFIX.find(([prefix]) => pathname.startsWith(prefix));
+  return match ? match[1] : null;
+}
+
 export function NavBar() {
   const { user } = useAuth();
+  const location = useLocation();
+  const sectionLabel = sectionLabelFor(location.pathname);
 
   if (!user) return null;
 
@@ -33,9 +53,11 @@ export function NavBar() {
               <span style={{ fontWeight: 700, color: "var(--color-text)", fontSize: 16, lineHeight: 1.2 }}>
                 MedicDesk.ai
               </span>
-              <span style={{ fontSize: 11, color: "var(--color-primary)", lineHeight: 1.2 }}>
-                Ambient Scribe
-              </span>
+              {sectionLabel && (
+                <span style={{ fontSize: 11, color: "var(--color-primary)", lineHeight: 1.2 }}>
+                  {sectionLabel}
+                </span>
+              )}
             </span>
           </Link>
           <div className="row">
@@ -43,7 +65,10 @@ export function NavBar() {
             <Link to="/sessions">Sessions</Link>
             <Link to="/appointments">Appointments</Link>
             {(user.role === "PROVIDER" || user.role === "SUPER_ADMIN") && (
-              <Link to="/preferences">Preferences</Link>
+              <>
+                <Link to="/templates">Templates</Link>
+                <Link to="/preferences">Preferences</Link>
+              </>
             )}
             <Link to="/settings">Settings</Link>
             {user.role === "SUPER_ADMIN" && <Link to="/admin">Clinic Admin</Link>}

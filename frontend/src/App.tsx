@@ -19,6 +19,7 @@ import { OutboundLogPage } from "./pages/OutboundLogPage";
 import { ClinicAdminDashboard } from "./pages/ClinicAdminDashboard";
 import { ClinicAnalyticsPage } from "./pages/ClinicAnalyticsPage";
 import { PreferencesSettingsPage } from "./pages/PreferencesSettingsPage";
+import { TemplatesPage } from "./pages/TemplatesPage";
 import { PlatformLayout } from "./pages/platform/PlatformLayout";
 import { PlatformPatientsPage } from "./pages/platform/PlatformPatientsPage";
 import { PlatformScribePage } from "./pages/platform/PlatformScribePage";
@@ -83,6 +84,14 @@ function AppRoutes() {
               <RequireAuth>
                 <EncounterRecordingPage />
               </RequireAuth>
+            }
+          />
+          <Route
+            path="/templates"
+            element={
+              <RequireRole roles={["PROVIDER", "SUPER_ADMIN"]}>
+                <TemplatesPage />
+              </RequireRole>
             }
           />
           <Route

@@ -3,21 +3,33 @@ import { Link, useNavigate } from "react-router-dom";
 import * as dashboardApi from "../api/dashboard";
 import * as patientsApi from "../api/patients";
 import * as usersApi from "../api/users";
+import { useAuth } from "../auth/AuthContext";
 import { FirstLoginLanguageModal } from "../components/common/FirstLoginLanguageModal";
 import { DateTimeWidget } from "../components/dashboard/DateTimeWidget";
 import { StatWidget } from "../components/dashboard/StatWidget";
-import { StartScribeSessionModal } from "../components/encounters/StartScribeSessionModal";
+import { StartSessionButton } from "../components/encounters/StartSessionButton";
 import { ApiError } from "../api/client";
 import type { DashboardSummary, Encounter, Patient, User } from "../types";
 
+/** Full names in this app are commonly "Dr. <First> <Last>" — greet with
+ * just the first real name, not the title itself. Falls back sensibly for
+ * a name with no title, or a single word. */
+function greetingName(fullName: string | undefined): string {
+  if (!fullName) return "there";
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length > 1 && /^dr\.?$/i.test(parts[0])) return parts[1];
+  return parts[0];
+}
+
 export function DashboardPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [recapText, setRecapText] = useState<string | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [providers, setProviders] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [startingFor, setStartingFor] = useState<Patient | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -36,6 +48,14 @@ export function DashboardPage() {
         setLoading(false);
       }
     })();
+
+    // Fetched separately from the rest of the dashboard, and never lets a
+    // failure block the page — it's a nice-to-have sentence, not a widget
+    // anyone depends on.
+    dashboardApi
+      .getDailyRecap()
+      .then((r) => setRecapText(r.summary_text))
+      .catch(() => setRecapText(null));
   }, []);
 
   function handleStarted(encounter: Encounter) {
@@ -48,6 +68,14 @@ export function DashboardPage() {
     <div className="page stack">
       <FirstLoginLanguageModal />
       {error && <div className="error-text">{error}</div>}
+
+      {recapText && (
+        <div className="card" style={{ background: "var(--color-surface-alt, var(--color-surface))" }}>
+          <p style={{ margin: 0 }}>
+            👋 Hi {greetingName(user?.full_name)} — {recapText}
+          </p>
+        </div>
+      )}
 
       <div className="row" style={{ flexWrap: "wrap", alignItems: "stretch" }}>
         <DateTimeWidget />
@@ -99,14 +127,7 @@ export function DashboardPage() {
                 <td>{p.phone ?? "—"}</td>
                 <td>{p.email ?? "—"}</td>
                 <td>
-                  <button
-                    className="btn"
-                    disabled={providers.length === 0}
-                    onClick={() => setStartingFor(p)}
-                    title={providers.length === 0 ? "No doctor available to record for" : undefined}
-                  >
-                    Start Scribe session
-                  </button>
+                  <StartSessionButton patient={p} providers={providers} onStarted={handleStarted} onError={setError} />
                 </td>
               </tr>
             ))}
@@ -120,16 +141,6 @@ export function DashboardPage() {
           </tbody>
         </table>
       </div>
-
-      {startingFor && (
-        <StartScribeSessionModal
-          key={startingFor.id}
-          patient={startingFor}
-          providers={providers}
-          onClose={() => setStartingFor(null)}
-          onStarted={handleStarted}
-        />
-      )}
     </div>
   );
 }

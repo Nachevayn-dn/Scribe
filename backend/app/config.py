@@ -80,6 +80,9 @@ class Settings(BaseSettings):
     # Clinic contracts/order forms/consent forms — private, never served
     # from a public URL (see services/document_storage.py).
     document_storage_dir: str = "./data/documents"
+    # Platform-wide announcement videos — same private-storage pattern as
+    # document_storage_dir (see services/announcement_storage.py).
+    announcement_storage_dir: str = "./data/announcements"
 
     # Data retention (see services/retention_service.py) — two stages:
     # audio is deleted and the session archived after retention_audio_days

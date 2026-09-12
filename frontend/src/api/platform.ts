@@ -1,5 +1,6 @@
 import { ApiError, api, getToken } from "./client";
 import type {
+  Announcement,
   Clinic,
   ClinicDocument,
   ClinicDocumentType,
@@ -109,4 +110,27 @@ export async function downloadClinicDocument(clinicId: string, documentId: strin
 
 export function getAnalytics() {
   return api.get<PlatformAnalytics>("/platform/analytics");
+}
+
+/** clinicId omitted sends to every clinic on the platform. */
+export function createAnnouncement(payload: {
+  message: string;
+  title?: string;
+  clinicId?: string;
+  video?: File;
+}) {
+  const form = new FormData();
+  form.append("message", payload.message);
+  if (payload.title) form.append("title", payload.title);
+  if (payload.clinicId) form.append("clinic_id", payload.clinicId);
+  if (payload.video) form.append("video", payload.video);
+  return api.postForm<Announcement>("/platform/announcements", form);
+}
+
+export function listAnnouncements() {
+  return api.get<Announcement[]>("/platform/announcements");
+}
+
+export function deactivateAnnouncement(announcementId: string) {
+  return api.del<void>(`/platform/announcements/${announcementId}`);
 }

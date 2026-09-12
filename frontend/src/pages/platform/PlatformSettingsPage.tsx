@@ -7,9 +7,9 @@ import { DecisionRulesTab } from "./DecisionRulesTab";
 import { KnowledgeBaseTab } from "./KnowledgeBaseTab";
 import { OutboundSettingsTab } from "./OutboundSettingsTab";
 import { TelephonyTab } from "./TelephonyTab";
-import type { Clinic, ClinicDocument, ClinicDocumentType, User, UserRole } from "../../types";
+import type { Announcement, Clinic, ClinicDocument, ClinicDocumentType, User, UserRole } from "../../types";
 
-type Tab = "clinics" | "details" | "team" | "telephony" | "outbound" | "knowledge" | "rules" | "documents" | "myAccount";
+type Tab = "clinics" | "details" | "team" | "telephony" | "outbound" | "knowledge" | "rules" | "documents" | "announcements" | "myAccount";
 
 const TAB_LABELS: Record<Tab, string> = {
   clinics: "Clinics",
@@ -20,6 +20,7 @@ const TAB_LABELS: Record<Tab, string> = {
   knowledge: "Knowledge base",
   rules: "Decision rules",
   documents: "Documents",
+  announcements: "Announcements",
   myAccount: "My Account",
 };
 
@@ -60,7 +61,7 @@ export function PlatformSettingsPage() {
       <h1 style={{ fontSize: 22 }}>Settings</h1>
 
       <div className="row" style={{ flexWrap: "wrap" }}>
-        {(["clinics", "details", "team", "telephony", "outbound", "knowledge", "rules", "documents", "myAccount"] as Tab[]).map((t) => (
+        {(["clinics", "details", "team", "telephony", "outbound", "knowledge", "rules", "documents", "announcements", "myAccount"] as Tab[]).map((t) => (
           <button
             key={t}
             className="btn"
@@ -85,7 +86,7 @@ export function PlatformSettingsPage() {
         />
       )}
 
-      {tab !== "clinics" && tab !== "myAccount" && (
+      {tab !== "clinics" && tab !== "myAccount" && tab !== "announcements" && (
         <label className="row" style={{ gap: 8 }}>
           <span style={{ fontSize: 13, color: "var(--color-text-muted)" }}>Clinic</span>
           <select
@@ -115,6 +116,7 @@ export function PlatformSettingsPage() {
       {tab === "knowledge" && selectedClinic && <KnowledgeBaseTab clinic={selectedClinic} />}
       {tab === "rules" && selectedClinic && <DecisionRulesTab clinic={selectedClinic} />}
       {tab === "documents" && selectedClinic && <DocumentsTab clinic={selectedClinic} />}
+      {tab === "announcements" && <AnnouncementsTab clinics={clinics} />}
       {tab === "myAccount" && <SettingsPage />}
     </div>
   );
@@ -642,6 +644,167 @@ function DocumentsTab({ clinic }: { clinic: Clinic }) {
               <tr>
                 <td colSpan={5} style={{ color: "var(--color-text-muted)" }}>
                   No documents uploaded yet for {clinic.name}.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function AnnouncementsTab({ clinics }: { clinics: Clinic[] }) {
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [title, setTitle] = useState("");
+  const [message, setMessage] = useState("");
+  const [clinicId, setClinicId] = useState(""); // "" = all clinics
+  const [video, setVideo] = useState<File | null>(null);
+  const [sending, setSending] = useState(false);
+
+  async function refresh() {
+    setLoading(true);
+    try {
+      setAnnouncements(await platformApi.listAnnouncements());
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to load announcements");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  async function handleSend(e: React.FormEvent) {
+    e.preventDefault();
+    if (!message.trim()) return;
+    setSending(true);
+    setError(null);
+    try {
+      await platformApi.createAnnouncement({
+        message: message.trim(),
+        title: title.trim() || undefined,
+        clinicId: clinicId || undefined,
+        video: video ?? undefined,
+      });
+      setTitle("");
+      setMessage("");
+      setClinicId("");
+      setVideo(null);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to send announcement");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function handleRetire(a: Announcement) {
+    if (!window.confirm("Retire this announcement? Anyone who hasn't seen it yet will stop being shown it.")) return;
+    try {
+      await platformApi.deactivateAnnouncement(a.id);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to retire announcement");
+    }
+  }
+
+  function clinicName(id: string | null) {
+    if (!id) return "Everyone";
+    return clinics.find((c) => c.id === id)?.name ?? "Former clinic";
+  }
+
+  if (loading) return <div className="card">Loading…</div>;
+
+  return (
+    <div className="stack">
+      <form className="card stack" onSubmit={handleSend}>
+        <strong style={{ fontSize: 13 }}>New announcement</strong>
+        <input
+          className="input"
+          placeholder="Title (optional)"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
+        <textarea
+          className="input"
+          placeholder="Message"
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          rows={4}
+          required
+        />
+        <div className="row" style={{ flexWrap: "wrap" }}>
+          <select className="input" value={clinicId} onChange={(e) => setClinicId(e.target.value)} style={{ width: 220 }}>
+            <option value="">Send to everyone</option>
+            {clinics.map((c) => (
+              <option key={c.id} value={c.id}>
+                Just {c.name}
+              </option>
+            ))}
+          </select>
+          <label className="btn" style={{ cursor: "pointer" }}>
+            {video ? video.name : "Attach a video (optional)"}
+            <input
+              type="file"
+              accept="video/mp4,video/webm,video/quicktime"
+              onChange={(e) => setVideo(e.target.files?.[0] ?? null)}
+              style={{ display: "none" }}
+            />
+          </label>
+        </div>
+        <div className="row" style={{ justifyContent: "flex-end" }}>
+          <button className="btn btn-primary" type="submit" disabled={sending}>
+            {sending ? "Sending…" : "Send announcement"}
+          </button>
+        </div>
+      </form>
+      <p style={{ fontSize: 12, color: "var(--color-text-muted)", margin: "-8px 0 0" }}>
+        Shown as a popup the doctor must acknowledge ("Got it") before it goes away.
+      </p>
+
+      {error && <div className="error-text">{error}</div>}
+
+      <div className="card">
+        <table>
+          <thead>
+            <tr>
+              <th>Sent to</th>
+              <th>Title</th>
+              <th>Message</th>
+              <th>Video</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {announcements.map((a) => (
+              <tr key={a.id}>
+                <td>{clinicName(a.clinic_id)}</td>
+                <td>{a.title ?? "—"}</td>
+                <td style={{ maxWidth: 320, whiteSpace: "pre-wrap" }}>{a.message}</td>
+                <td>{a.has_video ? "Yes" : "—"}</td>
+                <td>
+                  <span className="badge">{a.is_active ? "Active" : "Retired"}</span>
+                </td>
+                <td>
+                  {a.is_active && (
+                    <button className="btn" onClick={() => handleRetire(a)}>
+                      Retire
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {announcements.length === 0 && (
+              <tr>
+                <td colSpan={6} style={{ color: "var(--color-text-muted)" }}>
+                  No announcements sent yet.
                 </td>
               </tr>
             )}

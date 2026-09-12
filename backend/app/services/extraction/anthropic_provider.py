@@ -52,8 +52,9 @@ class AnthropicExtractionProvider(ClinicalExtractionProvider):
         transcript_text: str,
         preferences: list[DoctorPreference],
         template: NoteTemplate | None,
+        section_titles_override: list[str] | None = None,
     ) -> ExtractionResult:
-        user_prompt = build_user_prompt(transcript_text, preferences, template)
+        user_prompt = build_user_prompt(transcript_text, preferences, template, section_titles_override)
 
         last_error: Exception | None = None
         for attempt in range(2):  # one retry on a parse/validation failure

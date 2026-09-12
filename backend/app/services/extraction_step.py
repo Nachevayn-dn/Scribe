@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.clinical_note import ClinicalNote, NoteEntity
 from app.models.encounter import Encounter, EncounterStatus
 from app.models.template import NoteTemplate, TemplateType
+from app.models.template_section_translation import TemplateSectionTranslation
 from app.models.transcript import Transcript
 from app.services.audit_service import log_action
 from app.services.extraction.anthropic_provider import AnthropicExtractionProvider
@@ -35,6 +36,27 @@ async def _get_template(db: AsyncSession, template_id: uuid.UUID | None) -> Note
     ).scalars().first()
 
 
+async def _get_translated_section_titles(
+    db: AsyncSession, template: NoteTemplate | None, language: str | None
+) -> list[str] | None:
+    """A doctor-confirmed translation of this template's section titles into
+    the visit's language, if one's been saved (see PUT
+    /templates/{id}/translations/{language} and
+    models/template_section_translation.py) — None falls back to the
+    template's own (English) structure, same as before this existed."""
+    if template is None or not language or language == "en":
+        return None
+    translation = (
+        await db.execute(
+            select(TemplateSectionTranslation).where(
+                TemplateSectionTranslation.template_id == template.id,
+                TemplateSectionTranslation.language == language,
+            )
+        )
+    ).scalar_one_or_none()
+    return translation.translated_structure if translation else None
+
+
 async def run_extraction(
     db: AsyncSession,
     encounter: Encounter,
@@ -43,9 +65,10 @@ async def run_extraction(
 ) -> None:
     preferences = await get_active_preferences(db, encounter.provider_id)
     template = await _get_template(db, template_id)
+    section_titles_override = await _get_translated_section_titles(db, template, encounter.language)
 
     provider = AnthropicExtractionProvider()
-    result = await provider.extract(transcript.raw_text, preferences, template)
+    result = await provider.extract(transcript.raw_text, preferences, template, section_titles_override)
 
     note = ClinicalNote(
         encounter_id=encounter.id,
