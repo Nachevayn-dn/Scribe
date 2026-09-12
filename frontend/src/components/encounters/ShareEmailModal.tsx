@@ -65,6 +65,8 @@ export function ShareEmailModal({ encounterId, contentType, onClose }: Props) {
               value={recipients}
               onChange={(e) => setRecipients(e.target.value)}
               placeholder="staff@example.com, frontdesk@example.com"
+              autoComplete="off"
+              name="share-recipients-no-autofill"
             />
           </label>
 
