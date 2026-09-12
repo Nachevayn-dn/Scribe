@@ -11,6 +11,10 @@ class ClinicResponse(BaseModel):
     is_active: bool
     contact_email: str | None
     staff_email: str | None
+    # White-label override — null for every clinic unless a platform admin
+    # has set one (see PLATFORM_ADMIN-gated /platform/clinics/{id}/logo).
+    logo_url: str | None
+    branding_name: str | None
 
     model_config = {"from_attributes": True}
 

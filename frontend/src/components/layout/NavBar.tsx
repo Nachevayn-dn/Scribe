@@ -1,15 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
-import { DoctorAvatar } from "./DoctorAvatar";
-import { LogoutLink } from "./LogoutLink";
 import { MedicDeskLogo } from "./MedicDeskLogo";
-import { ThemeSwitcher } from "./ThemeSwitcher";
-
-const ROLE_LABELS: Record<string, string> = {
-  PROVIDER: "Doctor",
-  SUPER_ADMIN: "Admin",
-  ASSISTANT: "Assistant",
-};
+import { UserMenu } from "./UserMenu";
 
 /** The small label under the MedicDesk.ai wordmark — names whichever
  * product area the page belongs to, rather than always reading "Ambient
@@ -29,10 +21,23 @@ function sectionLabelFor(pathname: string): string | null {
   return match ? match[1] : null;
 }
 
+/** A nav link, styled small and un-underlined via .nav-link, with the
+ * current section highlighted (prefix match, so /encounters/:id still
+ * lights up "Sessions"). */
+function NavItem({ to, label, pathname }: { to: string; label: string; pathname: string }) {
+  const isActive = to === "/" ? pathname === "/" : pathname.startsWith(to);
+  return (
+    <Link to={to} className={isActive ? "nav-link active" : "nav-link"}>
+      {label}
+    </Link>
+  );
+}
+
 export function NavBar() {
   const { user } = useAuth();
   const location = useLocation();
   const sectionLabel = sectionLabelFor(location.pathname);
+  const pathname = location.pathname;
 
   if (!user) return null;
 
@@ -44,52 +49,58 @@ export function NavBar() {
     >
       <div
         className="page"
-        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", gap: 20 }}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "12px 20px",
+          gap: 16,
+          maxWidth: "100%",
+          overflowX: "auto",
+        }}
       >
-        <div className="row" style={{ gap: 24, flexWrap: "wrap" }}>
-          <Link to="/" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 10 }}>
-            <MedicDeskLogo size={34} />
+        <div className="row" style={{ gap: 20, flexWrap: "nowrap" }}>
+          <Link
+            to="/"
+            style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}
+          >
+            {user.clinic_logo_url ? (
+              <img
+                src={user.clinic_logo_url}
+                alt={user.clinic_branding_name ?? "Clinic logo"}
+                style={{ width: 30, height: 30, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+              />
+            ) : (
+              <MedicDeskLogo size={30} />
+            )}
             <span className="stack" style={{ gap: 0 }}>
-              <span style={{ fontWeight: 700, color: "var(--color-text)", fontSize: 16, lineHeight: 1.2 }}>
-                MedicDesk.ai
+              <span style={{ fontWeight: 700, color: "var(--color-text)", fontSize: 15, lineHeight: 1.2 }}>
+                {user.clinic_branding_name || "MedicDesk.ai"}
               </span>
               {sectionLabel && (
-                <span style={{ fontSize: 11, color: "var(--color-primary)", lineHeight: 1.2 }}>
+                <span style={{ fontSize: 10, color: "var(--color-primary)", lineHeight: 1.2 }}>
                   {sectionLabel}
                 </span>
               )}
             </span>
           </Link>
-          <div className="row">
-            <Link to="/patients">Patients</Link>
-            <Link to="/sessions">Sessions</Link>
-            <Link to="/appointments">Appointments</Link>
+          <nav className="row" style={{ gap: 14, flexWrap: "nowrap" }}>
+            <NavItem to="/patients" label="Patients" pathname={pathname} />
+            <NavItem to="/sessions" label="Sessions" pathname={pathname} />
+            <NavItem to="/appointments" label="Appointments" pathname={pathname} />
             {(user.role === "PROVIDER" || user.role === "SUPER_ADMIN") && (
               <>
-                <Link to="/templates">Templates</Link>
-                <Link to="/preferences">Preferences</Link>
+                <NavItem to="/templates" label="Templates" pathname={pathname} />
+                <NavItem to="/preferences" label="Preferences" pathname={pathname} />
               </>
             )}
-            <Link to="/settings">Settings</Link>
-            {user.role === "SUPER_ADMIN" && <Link to="/admin">Clinic Admin</Link>}
-            {user.is_platform_admin && <Link to="/platform">Platform</Link>}
-          </div>
+            <NavItem to="/settings" label="Settings" pathname={pathname} />
+            {user.role === "SUPER_ADMIN" && <NavItem to="/admin" label="Clinic Admin" pathname={pathname} />}
+            {user.is_platform_admin && <NavItem to="/platform" label="Platform" pathname={pathname} />}
+          </nav>
         </div>
 
-        <div className="row" style={{ gap: 12 }}>
-          <ThemeSwitcher />
-          <DoctorAvatar />
-          <div className="stack" style={{ gap: 2, minWidth: 0 }}>
-            <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: "nowrap" }}>{user.full_name}</span>
-            <span style={{ fontSize: 12, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
-              {user.clinic_name}
-            </span>
-            <span className="badge" style={{ whiteSpace: "nowrap", width: "fit-content" }}>
-              {ROLE_LABELS[user.role] ?? user.role}
-            </span>
-          </div>
-          <LogoutLink />
-        </div>
+        <UserMenu />
       </div>
     </header>
   );

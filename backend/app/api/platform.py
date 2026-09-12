@@ -42,6 +42,7 @@ from app.schemas.platform import (
 from app.schemas.user import UserResponse
 from app.services import announcement_storage, auth_service, document_storage
 from app.services.audit_service import log_action
+from app.services.clinic_logo_storage import save_clinic_logo
 from app.services.email_service import EmailNotConfiguredError, send_share_email
 
 router = APIRouter(prefix="/platform", tags=["platform"])
@@ -51,6 +52,7 @@ _MAX_DOCUMENT_BYTES = 20 * 1024 * 1024  # 20 MB
 _ALLOWED_DOCUMENT_MIME_TYPES = {"application/pdf", "image/png", "image/jpeg"}
 _MAX_VIDEO_BYTES = 200 * 1024 * 1024  # 200 MB
 _ALLOWED_VIDEO_MIME_TYPES = {"video/mp4", "video/webm", "video/quicktime"}
+_MAX_LOGO_BYTES = 5 * 1024 * 1024  # 5 MB
 
 
 async def _get_clinic_or_404(db: AsyncSession, clinic_id: uuid.UUID) -> Clinic:
@@ -124,6 +126,67 @@ async def update_clinic(
         resource_type="Clinic",
         resource_id=str(clinic.id),
         metadata={k: str(v) for k, v in changes.items()},
+        ip_address=client_ip(request),
+    )
+    await db.commit()
+    await db.refresh(clinic)
+    return clinic
+
+
+@router.post("/clinics/{clinic_id}/logo", response_model=PlatformClinicResponse)
+async def upload_clinic_logo(
+    clinic_id: uuid.UUID,
+    request: Request,
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+) -> Clinic:
+    """White-label override — sets the logo shown instead of the default
+    MedicDesk.ai icon for this clinic's own users. Platform-admin only; a
+    clinic's own SUPER_ADMIN has no route to this endpoint (require_platform_admin,
+    not require_role) or to anything else in this router."""
+    clinic = await _get_clinic_or_404(db, clinic_id)
+    content = await file.read()
+    if len(content) > _MAX_LOGO_BYTES:
+        raise BadRequestError("Logo image must be 5 MB or smaller")
+
+    mime_type = file.content_type or ""
+    try:
+        clinic.logo_url = save_clinic_logo(clinic.id, content, mime_type)
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
+
+    await log_action(
+        db,
+        clinic_id=clinic.id,
+        actor_user_id=current_user.id,
+        action="PLATFORM_CLINIC_LOGO_UPDATED",
+        resource_type="Clinic",
+        resource_id=str(clinic.id),
+        ip_address=client_ip(request),
+    )
+    await db.commit()
+    await db.refresh(clinic)
+    return clinic
+
+
+@router.delete("/clinics/{clinic_id}/logo", response_model=PlatformClinicResponse)
+async def delete_clinic_logo(
+    clinic_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(require_platform_admin),
+    db: AsyncSession = Depends(get_db),
+) -> Clinic:
+    """Reverts this clinic back to the default MedicDesk.ai logo."""
+    clinic = await _get_clinic_or_404(db, clinic_id)
+    clinic.logo_url = None
+    await log_action(
+        db,
+        clinic_id=clinic.id,
+        actor_user_id=current_user.id,
+        action="PLATFORM_CLINIC_LOGO_REMOVED",
+        resource_type="Clinic",
+        resource_id=str(clinic.id),
         ip_address=client_ip(request),
     )
     await db.commit()

@@ -24,6 +24,15 @@ class Clinic(UUIDPkMixin, TimestampMixin, SoftDeleteMixin, Base):
     # the same inbox its staff actually works from.
     staff_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
+    # White-label override: null means "show the default MedicDesk.ai logo
+    # and wordmark", which is every clinic's behavior unless a platform
+    # admin sets these for a specific clinic (see PLATFORM_ADMIN-gated
+    # POST/DELETE /platform/clinics/{id}/logo and the branding_name field
+    # on PlatformClinicUpdateRequest). Never editable by a clinic's own
+    # SUPER_ADMIN — this is the platform operator's call, not the clinic's.
+    logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    branding_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     users: Mapped[list["User"]] = relationship(  # noqa: F821
         back_populates="clinic", cascade="all, delete-orphan"
     )

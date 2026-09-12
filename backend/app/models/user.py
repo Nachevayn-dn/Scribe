@@ -82,6 +82,20 @@ class User(UUIDPkMixin, TimestampMixin, SoftDeleteMixin, Base):
         since `clinic` is already eager-loaded (lazy="selectin" above)."""
         return self.clinic.name
 
+    @property
+    def clinic_logo_url(self) -> str | None:
+        """White-label logo override for this doctor's clinic — null for
+        every clinic unless a platform admin has set one. Denormalized here
+        for the same reason as clinic_name: the nav bar needs it on login
+        without a second request."""
+        return self.clinic.logo_url
+
+    @property
+    def clinic_branding_name(self) -> str | None:
+        """White-label wordmark override — shown instead of "MedicDesk.ai"
+        when set. See clinic_logo_url above."""
+        return self.clinic.branding_name
+
 
 class ProviderAssistant(UUIDPkMixin, TimestampMixin, Base):
     """Many-to-many: an assistant may support multiple providers (doctors)."""

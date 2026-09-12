@@ -27,9 +27,22 @@ export function createClinic(payload: {
 
 export function updateClinic(
   clinicId: string,
-  payload: Partial<Pick<Clinic, "name" | "address" | "phone" | "contact_email" | "staff_email" | "is_active">>,
+  payload: Partial<
+    Pick<Clinic, "name" | "address" | "phone" | "contact_email" | "staff_email" | "is_active" | "branding_name">
+  >,
 ) {
   return api.patch<Clinic>(`/platform/clinics/${clinicId}`, payload);
+}
+
+/** White-label logo override — platform-admin only. */
+export function uploadClinicLogo(clinicId: string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  return api.postForm<Clinic>(`/platform/clinics/${clinicId}/logo`, form);
+}
+
+export function deleteClinicLogo(clinicId: string) {
+  return api.del<Clinic>(`/platform/clinics/${clinicId}/logo`);
 }
 
 export function listClinicDoctors(clinicId: string) {

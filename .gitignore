@@ -27,6 +27,10 @@ frontend/.vite/
 !/data/avatars/.gitkeep
 **/data/documents/*
 !/data/documents/.gitkeep
+**/data/announcements/*
+!/data/announcements/.gitkeep
+**/data/clinic-logos/*
+!/data/clinic-logos/.gitkeep
 
 ## OS / editor
 .DS_Store

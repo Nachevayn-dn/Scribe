@@ -32,6 +32,12 @@ class PlatformClinicUpdateRequest(BaseModel):
     contact_email: EmailStr | None = None
     staff_email: EmailStr | None = None
     is_active: bool | None = None
+    # White-label override — the text shown instead of "MedicDesk.ai" for
+    # this clinic's own users. Send null explicitly to revert to the
+    # default; omit the field entirely to leave it unchanged (same
+    # exclude_unset semantics as every other field here). The logo image
+    # itself is a separate upload — see POST/DELETE /platform/clinics/{id}/logo.
+    branding_name: str | None = Field(default=None, max_length=255)
 
 
 class PlatformClinicResponse(BaseModel):
@@ -42,6 +48,8 @@ class PlatformClinicResponse(BaseModel):
     is_active: bool
     contact_email: str | None
     staff_email: str | None
+    logo_url: str | None
+    branding_name: str | None
 
     model_config = {"from_attributes": True}
 

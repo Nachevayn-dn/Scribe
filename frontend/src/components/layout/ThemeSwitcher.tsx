@@ -4,8 +4,8 @@ import { useAuth } from "../../auth/AuthContext";
 import type { ThemePreference } from "../../types";
 
 const SWATCHES: { value: ThemePreference; label: string; color: string }[] = [
-  { value: "midnight", label: "Midnight (amber)", color: "#e0a83a" },
-  { value: "jade", label: "Jade & Candlelight", color: "#1f6f54" },
+  { value: "midnight", label: "Midnight (ocean teal)", color: "#34b4c2" },
+  { value: "jade", label: "Jade (light)", color: "#087e8b" },
 ];
 
 /** Two small color swatches — click to switch the app's color scheme.

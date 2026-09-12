@@ -12,6 +12,7 @@ export function ClinicSidebar() {
   return (
     <VerticalNav
       subtitle="Clinic"
+      brandName={user.clinic_branding_name || undefined}
       sections={[
         [
           { label: "Patients", to: "/patients" },

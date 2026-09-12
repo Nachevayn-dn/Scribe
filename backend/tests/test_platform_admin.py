@@ -68,6 +68,94 @@ async def test_clinic_creation_accepts_contact_and_notification_emails(client: A
     assert saved["staff_email"] == "frontdesk@lakeside.example"
 
 
+async def test_platform_admin_can_set_and_clear_clinic_branding(client: AsyncClient):
+    """White-label override: only reachable via the platform console
+    (require_platform_admin), never via a clinic's own SUPER_ADMIN role —
+    see test_clinic_super_admin_cannot_set_own_branding below."""
+    operator = await signup_clinic(client)
+    await _make_platform_admin(operator["email"])
+
+    create_resp = await client.post(
+        "/api/v1/platform/clinics", headers=operator["headers"], json={"name": "Willow Creek Dental"}
+    )
+    clinic_id = create_resp.json()["id"]
+    assert create_resp.json()["logo_url"] is None
+    assert create_resp.json()["branding_name"] is None
+
+    # Set a custom wordmark.
+    patch_resp = await client.patch(
+        f"/api/v1/platform/clinics/{clinic_id}",
+        headers=operator["headers"],
+        json={"branding_name": "Willow Creek Dental Care"},
+    )
+    assert patch_resp.status_code == 200, patch_resp.text
+    assert patch_resp.json()["branding_name"] == "Willow Creek Dental Care"
+
+    # Upload a logo.
+    tiny_png = bytes.fromhex(
+        "89504e470d0a1a0a0000000d494844520000000100000001080600000"
+        "01f15c4890000000a49444154789c6360000002000100e02186c4000000"
+        "0049454e44ae426082"
+    )
+    logo_resp = await client.post(
+        f"/api/v1/platform/clinics/{clinic_id}/logo",
+        headers=operator["headers"],
+        files={"file": ("logo.png", tiny_png, "image/png")},
+    )
+    assert logo_resp.status_code == 200, logo_resp.text
+    logo_url = logo_resp.json()["logo_url"]
+    assert logo_url is not None
+    assert logo_url.startswith("/static/clinic-logos/")
+
+    # A doctor at that clinic sees the override denormalized onto their own
+    # /auth/me response — the nav bar needs it without a second request.
+    doctor_resp = await client.post(
+        f"/api/v1/platform/clinics/{clinic_id}/doctors",
+        headers=operator["headers"],
+        json={"email": "willow-doc@example.com", "full_name": "Dr. Willow", "role": "PROVIDER"},
+    )
+    doctor_id = doctor_resp.json()["id"]
+    creds_resp = await client.post(
+        f"/api/v1/platform/users/{doctor_id}/generate-credentials", headers=operator["headers"]
+    )
+    temp_password = creds_resp.json()["temp_password"]
+    login_resp = await client.post(
+        "/api/v1/auth/login", json={"email": "willow-doc@example.com", "password": temp_password}
+    )
+    doctor_headers = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
+
+    me_resp = await client.get("/api/v1/auth/me", headers=doctor_headers)
+    assert me_resp.json()["clinic_branding_name"] == "Willow Creek Dental Care"
+    assert me_resp.json()["clinic_logo_url"] == logo_url
+
+    # Clear both back to the default.
+    clear_resp = await client.patch(
+        f"/api/v1/platform/clinics/{clinic_id}",
+        headers=operator["headers"],
+        json={"branding_name": None},
+    )
+    assert clear_resp.json()["branding_name"] is None
+
+    delete_resp = await client.delete(f"/api/v1/platform/clinics/{clinic_id}/logo", headers=operator["headers"])
+    assert delete_resp.status_code == 200, delete_resp.text
+    assert delete_resp.json()["logo_url"] is None
+
+
+async def test_clinic_super_admin_cannot_set_own_branding(client: AsyncClient):
+    """Branding is a platform-operator decision, not a clinic self-service
+    setting — a clinic's own SUPER_ADMIN has no route to it at all."""
+    admin = await signup_clinic(client)
+    me_resp = await client.get("/api/v1/auth/me", headers=admin["headers"])
+    clinic_id = me_resp.json()["clinic_id"]
+
+    resp = await client.post(
+        f"/api/v1/platform/clinics/{clinic_id}/logo",
+        headers=admin["headers"],
+        files={"file": ("logo.png", b"not-a-real-png", "image/png")},
+    )
+    assert resp.status_code == 403
+
+
 async def test_platform_admin_can_update_clinic_details(client: AsyncClient):
     operator = await signup_clinic(client)
     await _make_platform_admin(operator["email"])

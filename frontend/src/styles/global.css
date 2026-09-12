@@ -1,18 +1,24 @@
 :root {
-  /* MedicDesk.ai brand palette: black/near-black ground, dark-green
-     surfaces, amber accent. Kept as CSS variables (not hardcoded) so any
-     future re-theme only touches this block. This is "Midnight", the
-     default — see [data-theme="jade"] below for the alternate scheme. */
-  --color-bg: #0a0f0c;
-  --color-surface: #10201a;
-  --color-surface-hover: #16281f;
-  --color-border: #26392e;
-  --color-text: #f2efe6;
-  --color-text-muted: #9db3a1;
-  --color-primary: #e0a83a;
-  --color-primary-hover: #c8941f;
-  --color-primary-contrast: #1a1305;
-  --color-primary-soft: rgba(224, 168, 58, 0.16);
+  /* MedicDesk.ai brand palette — matches the same --bg/--action/--accent
+     token system used on the marketing site: deep-ocean-navy ground,
+     Electric Teal as the primary interactive color, Goldfish Amber kept
+     as a separate, sparingly-used warm accent (see --color-accent*)
+     rather than flooding every link/button/badge with it. This is
+     "Midnight", the default — see [data-theme="jade"] below for the
+     alternate, light scheme. */
+  --color-bg: #06202f;
+  --color-surface: #0d2e40;
+  --color-surface-hover: #123650;
+  --color-border: #1e3d46;
+  --color-text: #d9e8e3;
+  --color-text-muted: #93aeb2;
+  --color-primary: #34b4c2;
+  --color-primary-hover: #7fd6de;
+  --color-primary-contrast: #04161f;
+  --color-primary-soft: rgba(52, 180, 194, 0.16);
+  --color-accent: #fdb23b;
+  --color-accent-strong: #ffcc7a;
+  --color-accent-contrast: #1b1206;
   --color-danger: #e5484d;
   --color-danger-contrast: #1a0505;
   --radius: 8px;
@@ -20,21 +26,26 @@
   color-scheme: dark;
 }
 
-/* "Jade & Candlelight" — warm beige ground, jade-green accent. A doctor
-   picks this (or Midnight) under Integrations; applied by setting
-   data-theme on <html> from their saved theme_preference — see
-   auth/AuthContext.tsx. Not tied to the OS light/dark setting. */
+/* "Jade" — the light counterpart, same token system as the site's light
+   mode: soft mint-white ground, Electric Teal primary, Goldfish Amber as
+   the warm accent. A doctor picks this (or Midnight) under Integrations;
+   applied by setting data-theme on <html> from their saved
+   theme_preference — see auth/AuthContext.tsx. Not tied to the OS
+   light/dark setting. */
 :root[data-theme="jade"] {
-  --color-bg: #efe1c5;
-  --color-surface: #faf3e2;
-  --color-surface-hover: #f2e6cc;
-  --color-border: #ddc9a0;
-  --color-text: #2b2116;
-  --color-text-muted: #6b5c42;
-  --color-primary: #1f6f54;
-  --color-primary-hover: #17593f;
-  --color-primary-contrast: #f7f2e4;
-  --color-primary-soft: rgba(31, 111, 84, 0.14);
+  --color-bg: #f5faf7;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f1f7d9;
+  --color-border: #dce7e2;
+  --color-text: #16303e;
+  --color-text-muted: #587681;
+  --color-primary: #087e8b;
+  --color-primary-hover: #06606b;
+  --color-primary-contrast: #ffffff;
+  --color-primary-soft: rgba(8, 126, 139, 0.14);
+  --color-accent: #f6a21a;
+  --color-accent-strong: #b97710;
+  --color-accent-contrast: #1b1206;
   --color-danger: #b3261e;
   --color-danger-contrast: #f7f2e4;
   color-scheme: light;
@@ -52,6 +63,24 @@ body {
 
 a {
   color: var(--color-primary);
+}
+
+.nav-link {
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  padding: 4px 2px;
+}
+
+.nav-link:hover {
+  color: var(--color-text);
+}
+
+.nav-link.active {
+  color: var(--color-primary);
+  font-weight: 600;
 }
 
 button {

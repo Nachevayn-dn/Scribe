@@ -5,6 +5,11 @@ export interface CurrentUser {
   id: string;
   clinic_id: string;
   clinic_name: string;
+  // White-label override for this doctor's clinic — null unless a
+  // platform admin has set one. Falls back to the default MedicDesk.ai
+  // logo/wordmark when null.
+  clinic_logo_url: string | null;
+  clinic_branding_name: string | null;
   email: string;
   full_name: string;
   role: UserRole;
@@ -24,12 +29,19 @@ export interface Clinic {
   is_active: boolean;
   contact_email: string | null;
   staff_email: string | null;
+  // White-label override — set only by a platform admin (see
+  // PlatformSettingsPage's Details tab), never by the clinic's own
+  // SUPER_ADMIN.
+  logo_url: string | null;
+  branding_name: string | null;
 }
 
 export interface User {
   id: string;
   clinic_id: string;
   clinic_name: string;
+  clinic_logo_url: string | null;
+  clinic_branding_name: string | null;
   email: string;
   full_name: string;
   role: UserRole;

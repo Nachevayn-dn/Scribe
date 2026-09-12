@@ -17,6 +17,12 @@ interface Props {
    * shared Help/Feedback modal. Styled identically to a nav link, not as
    * a separate button, so the menu just quietly ends with it. */
   showFeedback?: boolean;
+  /** Defaults to "MedicDesk.ai". ClinicSidebar overrides this with the
+   * clinic's white-label branding_name when one is set (see
+   * ClinicSidebar.tsx) — Sidebar (the platform console's own nav) never
+   * does, since that tool is the operator's, not a specific clinic's, and
+   * must always read as MedicDesk.ai regardless of any clinic's branding. */
+  brandName?: string;
 }
 
 const itemStyle: React.CSSProperties = {
@@ -52,7 +58,7 @@ function Divider() {
  * platform admin console's sidebar and the doctor-facing clinic sidebar.
  * Each caller supplies its own title/sections; this owns only the layout,
  * active-link styling, and the trailing Help/Feedback item. */
-export function VerticalNav({ subtitle, sections, showFeedback }: Props) {
+export function VerticalNav({ subtitle, sections, showFeedback, brandName }: Props) {
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   return (
@@ -66,7 +72,7 @@ export function VerticalNav({ subtitle, sections, showFeedback }: Props) {
       }}
     >
       <div style={{ padding: "0 8px 20px" }}>
-        <span style={{ fontWeight: 700, fontSize: 15 }}>MedicDesk.ai</span>
+        <span style={{ fontWeight: 700, fontSize: 15 }}>{brandName || "MedicDesk.ai"}</span>
         <div style={{ fontSize: 11, color: "var(--color-text-muted)" }}>{subtitle}</div>
       </div>
 

@@ -77,6 +77,8 @@ class Settings(BaseSettings):
     # Storage
     audio_storage_dir: str = "./data/audio"
     avatar_storage_dir: str = "./data/avatars"
+    # White-label clinic logos — see services/clinic_logo_storage.py.
+    clinic_logo_storage_dir: str = "./data/clinic-logos"
     # Clinic contracts/order forms/consent forms — private, never served
     # from a public URL (see services/document_storage.py).
     document_storage_dir: str = "./data/documents"

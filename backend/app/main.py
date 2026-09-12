@@ -52,6 +52,12 @@ _avatar_dir = Path(settings.avatar_storage_dir)
 _avatar_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/static/avatars", StaticFiles(directory=_avatar_dir), name="avatars")
 
+# Serves white-label clinic logos (see services/clinic_logo_storage.py) —
+# same host-agnostic relative-URL pattern as avatars above.
+_clinic_logo_dir = Path(settings.clinic_logo_storage_dir)
+_clinic_logo_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/static/clinic-logos", StaticFiles(directory=_clinic_logo_dir), name="clinic-logos")
+
 
 @app.get("/health", tags=["health"])
 async def health() -> dict:

@@ -39,6 +39,12 @@ class UserResponse(BaseModel):
     id: uuid.UUID
     clinic_id: uuid.UUID
     clinic_name: str
+    # White-label override for this doctor's clinic — null unless a
+    # platform admin has set one (see clinic_logo_url/clinic_branding_name
+    # on models.user.User). The nav bar falls back to the default
+    # MedicDesk.ai logo/wordmark when these are null.
+    clinic_logo_url: str | None
+    clinic_branding_name: str | None
     email: str
     full_name: str
     role: UserRole
