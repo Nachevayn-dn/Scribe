@@ -68,7 +68,13 @@ async def create_clinic(
     current_user: User = Depends(require_platform_admin),
     db: AsyncSession = Depends(get_db),
 ) -> Clinic:
-    clinic = Clinic(name=payload.name, address=payload.address, phone=payload.phone)
+    clinic = Clinic(
+        name=payload.name,
+        address=payload.address,
+        phone=payload.phone,
+        contact_email=payload.contact_email,
+        staff_email=payload.staff_email,
+    )
     db.add(clinic)
     await db.flush()
     await log_action(

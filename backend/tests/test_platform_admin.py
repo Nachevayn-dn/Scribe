@@ -39,6 +39,35 @@ async def test_platform_admin_can_create_clinic(client: AsyncClient):
     assert any(c["id"] == clinic["id"] for c in list_resp.json())
 
 
+async def test_clinic_creation_accepts_contact_and_notification_emails(client: AsyncClient):
+    """The 'New clinic' form's confirmation summary (name/email/notification
+    email/phone) is only meaningful if these are actually persisted at
+    creation time, not just editable afterwards via PATCH."""
+    operator = await signup_clinic(client)
+    await _make_platform_admin(operator["email"])
+
+    resp = await client.post(
+        "/api/v1/platform/clinics",
+        headers=operator["headers"],
+        json={
+            "name": "Lakeside Pediatrics",
+            "phone": "555-0177",
+            "contact_email": "hello@lakeside.example",
+            "staff_email": "frontdesk@lakeside.example",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    clinic = resp.json()
+    assert clinic["contact_email"] == "hello@lakeside.example"
+    assert clinic["staff_email"] == "frontdesk@lakeside.example"
+
+    # And it's really saved, not just echoed — a fresh fetch shows the same.
+    list_resp = await client.get("/api/v1/platform/clinics", headers=operator["headers"])
+    saved = next(c for c in list_resp.json() if c["id"] == clinic["id"])
+    assert saved["contact_email"] == "hello@lakeside.example"
+    assert saved["staff_email"] == "frontdesk@lakeside.example"
+
+
 async def test_platform_admin_can_update_clinic_details(client: AsyncClient):
     operator = await signup_clinic(client)
     await _make_platform_admin(operator["email"])

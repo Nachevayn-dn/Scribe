@@ -122,6 +122,16 @@ export function PlatformSettingsPage() {
   );
 }
 
+type RevealedDoctor = { name: string; email: string; setup_url: string; emailed: boolean; email_error: string | null };
+type RevealedClinic = {
+  clinicName: string;
+  address: string | null;
+  phone: string | null;
+  contactEmail: string | null;
+  staffEmail: string | null;
+  doctor: RevealedDoctor | null;
+};
+
 function ClinicsTab({
   clinics,
   onCreated,
@@ -134,15 +144,15 @@ function ClinicsTab({
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [staffEmail, setStaffEmail] = useState("");
   const [doctorName, setDoctorName] = useState("");
   const [doctorEmail, setDoctorEmail] = useState("");
   const [doctorRole, setDoctorRole] = useState<Extract<UserRole, "PROVIDER" | "ASSISTANT">>("PROVIDER");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [revealed, setRevealed] = useState<
-    { clinicName: string; doctorEmail: string; setup_url: string; emailed: boolean; email_error: string | null } | null
-  >(null);
+  const [revealed, setRevealed] = useState<RevealedClinic | null>(null);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -155,11 +165,17 @@ function ClinicsTab({
         name: name.trim(),
         address: address.trim() || undefined,
         phone: phone.trim() || undefined,
+        contact_email: contactEmail.trim() || undefined,
+        staff_email: staffEmail.trim() || undefined,
       });
 
       // Onboarding a clinic without a doctor yet is still valid (e.g.
       // attaching contracts first) — only provision + send a link when
-      // both doctor fields are filled in.
+      // both doctor fields are filled in. Either way, everything just
+      // saved to the clinic's own profile (name/address/phone/emails) is
+      // echoed back below so the admin can confirm it before moving on —
+      // it's already persisted, this is just a receipt, not a save step.
+      let doctorInfo: RevealedDoctor | null = null;
       if (doctorName.trim() && doctorEmail.trim()) {
         const doctor = await platformApi.provisionDoctor(clinic.id, {
           email: doctorEmail.trim(),
@@ -167,13 +183,24 @@ function ClinicsTab({
           role: doctorRole,
         });
         const link = await platformApi.sendSetupLink(doctor.id, true);
-        setRevealed({ clinicName: clinic.name, doctorEmail: doctor.email, ...link });
-        setCopied(false);
+        doctorInfo = { name: doctor.full_name, email: doctor.email, ...link };
       }
+
+      setRevealed({
+        clinicName: clinic.name,
+        address: clinic.address,
+        phone: clinic.phone,
+        contactEmail: clinic.contact_email,
+        staffEmail: clinic.staff_email,
+        doctor: doctorInfo,
+      });
+      setCopied(false);
 
       setName("");
       setAddress("");
       setPhone("");
+      setContactEmail("");
+      setStaffEmail("");
       setDoctorName("");
       setDoctorEmail("");
       setDoctorRole("PROVIDER");
@@ -186,9 +213,9 @@ function ClinicsTab({
   }
 
   async function handleCopyLink() {
-    if (!revealed) return;
+    if (!revealed?.doctor) return;
     try {
-      await navigator.clipboard.writeText(revealed.setup_url);
+      await navigator.clipboard.writeText(revealed.doctor.setup_url);
       setCopied(true);
     } catch {
       setError("Couldn't copy — select and copy the link manually");
@@ -203,6 +230,24 @@ function ClinicsTab({
           <input className="input" placeholder="Clinic name" value={name} onChange={(e) => setName(e.target.value)} style={{ width: 220 }} required />
           <input className="input" placeholder="Address (optional)" value={address} onChange={(e) => setAddress(e.target.value)} style={{ width: 220 }} />
           <input className="input" placeholder="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} style={{ width: 160 }} />
+        </div>
+        <div className="row" style={{ flexWrap: "wrap" }}>
+          <input
+            className="input"
+            type="email"
+            placeholder="Clinic email (optional)"
+            value={contactEmail}
+            onChange={(e) => setContactEmail(e.target.value)}
+            style={{ width: 220 }}
+          />
+          <input
+            className="input"
+            type="email"
+            placeholder="Notification email (optional — front desk / scheduling)"
+            value={staffEmail}
+            onChange={(e) => setStaffEmail(e.target.value)}
+            style={{ width: 300 }}
+          />
         </div>
         <strong style={{ fontSize: 13 }}>First doctor (optional — leave blank to just create the clinic)</strong>
         <div className="row" style={{ flexWrap: "wrap" }}>
@@ -224,20 +269,69 @@ function ClinicsTab({
 
       {revealed && (
         <div className="card stack" style={{ borderColor: "var(--color-primary)" }}>
-          <strong>
-            {revealed.clinicName} created — setup link for {revealed.doctorEmail}
-          </strong>
-          <p style={{ margin: 0, fontFamily: "monospace", fontSize: 13, wordBreak: "break-all" }}>
-            {revealed.setup_url}
-          </p>
+          <strong>{revealed.clinicName} created</strong>
           <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-muted)" }}>
-            Valid for 7 days.{" "}
-            {revealed.emailed ? "Emailed to them." : revealed.email_error ? `Not emailed: ${revealed.email_error} — share the link another way.` : ""}
+            Saved to this clinic's profile — edit anytime under the Details tab.
           </p>
+          <table style={{ marginTop: 4 }}>
+            <tbody>
+              <tr>
+                <td style={{ color: "var(--color-text-muted)", paddingRight: 12 }}>Name</td>
+                <td>{revealed.clinicName}</td>
+              </tr>
+              <tr>
+                <td style={{ color: "var(--color-text-muted)", paddingRight: 12 }}>Address</td>
+                <td>{revealed.address ?? "—"}</td>
+              </tr>
+              <tr>
+                <td style={{ color: "var(--color-text-muted)", paddingRight: 12 }}>Phone</td>
+                <td>{revealed.phone ?? "—"}</td>
+              </tr>
+              <tr>
+                <td style={{ color: "var(--color-text-muted)", paddingRight: 12 }}>Clinic email</td>
+                <td>{revealed.contactEmail ?? "—"}</td>
+              </tr>
+              <tr>
+                <td style={{ color: "var(--color-text-muted)", paddingRight: 12 }}>Notification email</td>
+                <td>{revealed.staffEmail ?? "—"}</td>
+              </tr>
+              {revealed.doctor && (
+                <>
+                  <tr>
+                    <td style={{ color: "var(--color-text-muted)", paddingRight: 12 }}>Doctor</td>
+                    <td>{revealed.doctor.name}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ color: "var(--color-text-muted)", paddingRight: 12 }}>Doctor email</td>
+                    <td>{revealed.doctor.email}</td>
+                  </tr>
+                </>
+              )}
+            </tbody>
+          </table>
+
+          {revealed.doctor && (
+            <>
+              <p style={{ margin: "8px 0 0", fontFamily: "monospace", fontSize: 13, wordBreak: "break-all" }}>
+                {revealed.doctor.setup_url}
+              </p>
+              <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-muted)" }}>
+                Setup link valid for 7 days.{" "}
+                {revealed.doctor.emailed
+                  ? "Emailed to them."
+                  : revealed.doctor.email_error
+                    ? `Not emailed: ${revealed.doctor.email_error} — share the link another way.`
+                    : ""}
+              </p>
+            </>
+          )}
+
           <div className="row" style={{ justifyContent: "flex-end" }}>
-            <button className="btn" onClick={handleCopyLink}>
-              {copied ? "Copied ✓" : "Copy link"}
-            </button>
+            {revealed.doctor && (
+              <button className="btn" onClick={handleCopyLink}>
+                {copied ? "Copied ✓" : "Copy link"}
+              </button>
+            )}
             <button className="btn" onClick={() => setRevealed(null)}>
               Done
             </button>

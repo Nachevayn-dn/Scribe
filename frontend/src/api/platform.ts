@@ -15,7 +15,13 @@ export function listClinics() {
   return api.get<Clinic[]>("/platform/clinics");
 }
 
-export function createClinic(payload: { name: string; address?: string; phone?: string }) {
+export function createClinic(payload: {
+  name: string;
+  address?: string;
+  phone?: string;
+  contact_email?: string;
+  staff_email?: string;
+}) {
   return api.post<Clinic>("/platform/clinics", payload);
 }
 

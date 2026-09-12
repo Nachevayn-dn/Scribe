@@ -12,6 +12,11 @@ class PlatformClinicCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     address: str | None = None
     phone: str | None = None
+    # Optional at creation time so a platform admin can set these up front
+    # (and see them echoed back in the creation confirmation) instead of
+    # having to visit the clinic's Details tab as a separate step.
+    contact_email: EmailStr | None = None
+    staff_email: EmailStr | None = None
 
 
 class PlatformClinicUpdateRequest(BaseModel):
