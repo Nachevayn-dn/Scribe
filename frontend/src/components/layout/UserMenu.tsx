@@ -50,21 +50,11 @@ export function UserMenu() {
     function handleKey(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
     }
-    // Anchored via fixed screen coordinates computed once on open — rather
-    // than tracking scroll/resize to keep it glued to the trigger, just
-    // close it, same as clicking away.
-    function handleViewportChange() {
-      setOpen(false);
-    }
     document.addEventListener("mousedown", handleClick);
     document.addEventListener("keydown", handleKey);
-    window.addEventListener("scroll", handleViewportChange, true);
-    window.addEventListener("resize", handleViewportChange);
     return () => {
       document.removeEventListener("mousedown", handleClick);
       document.removeEventListener("keydown", handleKey);
-      window.removeEventListener("scroll", handleViewportChange, true);
-      window.removeEventListener("resize", handleViewportChange);
     };
   }, [open]);
 
