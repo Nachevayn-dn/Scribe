@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
+import { HelpFeedbackModal } from "../common/HelpFeedbackModal";
 import { DoctorAvatar } from "./DoctorAvatar";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 
@@ -9,6 +10,22 @@ const ROLE_LABELS: Record<string, string> = {
   PROVIDER: "Doctor",
   SUPER_ADMIN: "Admin",
   ASSISTANT: "Assistant",
+};
+
+const menuLinkStyle: React.CSSProperties = {
+  display: "block",
+  padding: "8px 10px",
+  margin: "0 -10px",
+  borderRadius: "var(--radius)",
+  textDecoration: "none",
+  fontSize: 14,
+  color: "var(--color-text)",
+  background: "none",
+  border: "none",
+  textAlign: "left",
+  width: "calc(100% + 20px)",
+  cursor: "pointer",
+  font: "inherit",
 };
 
 /** The doctor-corner control in the top-right of the NavBar. Collapses the
@@ -31,6 +48,7 @@ export function UserMenu() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState<{ top: number; right: number } | null>(null);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -134,6 +152,33 @@ export function UserMenu() {
 
             <div style={{ height: 1, background: "var(--color-border)" }} />
 
+            <div className="stack" style={{ gap: 0 }}>
+              <Link to="/settings" style={menuLinkStyle} onClick={() => setOpen(false)}>
+                Settings
+              </Link>
+              {(user.role === "PROVIDER" || user.role === "SUPER_ADMIN") && (
+                <Link to="/preferences" style={menuLinkStyle} onClick={() => setOpen(false)}>
+                  Preferences
+                </Link>
+              )}
+              {user.role === "SUPER_ADMIN" && (
+                <Link to="/settings#billing" style={menuLinkStyle} onClick={() => setOpen(false)}>
+                  Payment details
+                </Link>
+              )}
+              <button
+                style={menuLinkStyle}
+                onClick={() => {
+                  setOpen(false);
+                  setFeedbackOpen(true);
+                }}
+              >
+                Help / Feedback
+              </button>
+            </div>
+
+            <div style={{ height: 1, background: "var(--color-border)" }} />
+
             <div className="stack" style={{ gap: 6 }}>
               <span
                 style={{
@@ -150,6 +195,8 @@ export function UserMenu() {
           </div>,
           document.body,
         )}
+
+      {feedbackOpen && <HelpFeedbackModal onClose={() => setFeedbackOpen(false)} />}
     </>
   );
 }

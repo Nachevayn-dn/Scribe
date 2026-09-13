@@ -39,6 +39,9 @@ services:
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5}
       AUDIO_STORAGE_DIR: /app/data/audio
       AVATAR_STORAGE_DIR: /app/data/avatars
+      DOCUMENT_STORAGE_DIR: /app/data/documents
+      ANNOUNCEMENT_STORAGE_DIR: /app/data/announcements
+      CLINIC_LOGO_STORAGE_DIR: /app/data/clinic-logos
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-MedicDesk.ai <onboarding@resend.dev>}
       # Inbound/outbound phone agents (console.twilio.com) — optional.
@@ -53,12 +56,17 @@ services:
       # password"). In prod this is overridden to https://$DOMAIN — see
       # docker-compose.prod.yml.
       FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:5173}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
     ports:
       - "8000:8000"
     volumes:
       - ../backend:/app
       - audio_data:/app/data/audio
       - avatar_data:/app/data/avatars
+      - document_data:/app/data/documents
+      - announcement_data:/app/data/announcements
+      - clinic_logo_data:/app/data/clinic-logos
     depends_on:
       postgres:
         condition: service_healthy
@@ -81,4 +89,7 @@ volumes:
   pgdata:
   audio_data:
   avatar_data:
+  document_data:
+  announcement_data:
+  clinic_logo_data:
   frontend_node_modules:

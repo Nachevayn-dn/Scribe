@@ -21,6 +21,14 @@ export interface CurrentUser {
   is_platform_admin: boolean;
 }
 
+export interface PaymentMethodInfo {
+  has_payment_method: boolean;
+  brand: string | null;
+  last4: string | null;
+  exp_month: number | null;
+  exp_year: number | null;
+}
+
 export interface Clinic {
   id: string;
   name: string;

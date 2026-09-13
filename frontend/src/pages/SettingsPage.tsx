@@ -3,6 +3,7 @@ import * as clinicsApi from "../api/clinics";
 import * as usersApi from "../api/users";
 import { useAuth } from "../auth/AuthContext";
 import { ApiError } from "../api/client";
+import { BillingCard } from "../components/settings/BillingCard";
 import { EU_LANGUAGES } from "../data/languages";
 import type { Clinic } from "../types";
 
@@ -103,6 +104,14 @@ export function SettingsPage() {
       setSavingGreeting(false);
     }
   }
+
+  // Lets the account menu's "Payment details" link (/settings#billing) jump
+  // straight to that card instead of just landing at the top of the page.
+  useEffect(() => {
+    if (!loading && window.location.hash === "#billing") {
+      document.getElementById("billing")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [loading]);
 
   if (loading) return <div className="page">Loading…</div>;
 
@@ -210,6 +219,8 @@ export function SettingsPage() {
           </div>
         </form>
       )}
+
+      {isAdmin && <BillingCard />}
 
       <div className="card stack">
         <strong>Calendar</strong>

@@ -33,6 +33,12 @@ class Clinic(UUIDPkMixin, TimestampMixin, SoftDeleteMixin, Base):
     logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     branding_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
+    # Billing (see services/billing_service.py). Created lazily on first use
+    # of "Payment details" — null until then. We never store card details
+    # ourselves; this is only Stripe's own identifier for the customer
+    # object that holds the (Stripe-tokenized) payment method.
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     users: Mapped[list["User"]] = relationship(  # noqa: F821
         back_populates="clinic", cascade="all, delete-orphan"
     )

@@ -86,6 +86,16 @@ class Settings(BaseSettings):
     # document_storage_dir (see services/announcement_storage.py).
     announcement_storage_dir: str = "./data/announcements"
 
+    # Optional — required only for "Payment details" (billing). Real cards
+    # are never touched or stored by this backend: Stripe.js collects the
+    # card client-side and hands back a payment_method id; we only ever
+    # store that id (via a Customer object) and the Stripe customer id on
+    # the clinic. Get test-mode keys free at dashboard.stripe.com/apikeys —
+    # no business verification needed to test. Swap in live-mode keys
+    # (sk_live_.../pk_live_...) once ready to actually charge clinics.
+    stripe_secret_key: str | None = None
+    stripe_publishable_key: str | None = None
+
     # Data retention (see services/retention_service.py) — two stages:
     # audio is deleted and the session archived after retention_audio_days
     # (skippable per-doctor via User.retain_all_sessions, once a signed
